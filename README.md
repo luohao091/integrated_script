@@ -80,6 +80,17 @@ python main.py dataset split /path/to/dataset
 python main.py label create /path/to/images
 ```
 
+### 可执行文件使用
+
+从 [Releases](https://github.com/luohao091/integrated-script/releases) 页面下载最新的 `integrated_script.exe` 文件，直接运行：
+
+```cmd
+# Windows 命令行
+integrated_script.exe --help
+integrated_script.exe yolo validate /path/to/dataset
+integrated_script.exe image convert /path/to/images
+```
+
 ### 配置文件
 
 项目支持YAML配置文件自定义，默认配置文件位于 `config/default_config.yaml`。
@@ -125,6 +136,72 @@ integrated_script/
 
 ## 📝 开发说明
 
+### 环境要求
+
+- Python 3.8+
+- Windows 10/11 (主要支持平台)
+- 推荐使用虚拟环境
+
+### 开发安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/your-username/integrated-script.git
+cd integrated-script
+
+# 创建虚拟环境
+python -m venv venv
+venv\Scripts\activate  # Windows
+
+# 安装开发依赖
+pip install -e .
+pip install -r requirements-dev.txt
+```
+
+### 自动化发布
+
+项目支持完全自动化的发布流程：
+
+#### 快速发布（推荐）
+
+```cmd
+# Windows 一键发布
+release.bat
+```
+
+#### 手动发布
+
+```bash
+# 发布补丁版本 (1.0.0 → 1.0.1)
+python scripts/release.py patch
+
+# 发布次要版本 (1.0.0 → 1.1.0)
+python scripts/release.py minor --message "添加新功能"
+
+# 发布主要版本 (1.0.0 → 2.0.0)
+python scripts/release.py major --auto-push
+
+# 跳过测试和构建（快速发布）
+python scripts/release.py patch --skip-tests --skip-build
+```
+
+#### 版本管理
+
+```bash
+# 查看当前版本
+python scripts/version_manager.py current
+
+# 手动更新版本
+python scripts/version_manager.py update 1.2.3
+```
+
+#### 发布流程说明
+
+1. **本地发布**：运行发布脚本，自动更新版本、运行测试、构建EXE
+2. **推送代码**：自动或手动推送代码和标签到GitHub
+3. **自动构建**：GitHub Actions自动构建并发布到Releases
+4. **下载使用**：用户可从Releases页面下载最新版本
+
 ### 运行测试
 
 ```bash
@@ -147,6 +224,13 @@ flake8 .
 # 类型检查
 mypy src/
 ```
+
+### 代码规范
+
+- 使用 Black 进行代码格式化
+- 使用 isort 进行导入排序
+- 遵循 PEP 8 编码规范
+- 编写单元测试
 
 ## 📄 许可证
 
