@@ -234,7 +234,7 @@ class ReleaseManager:
         time.sleep(15)  # 等待15秒让GitHub有时间触发工作流
         
         start_time = time.time()
-        check_interval = 30  # 每30秒检查一次
+        check_interval = 15  # 每30秒检查一次
         consecutive_old_workflow_count = 0  # 连续找到旧工作流的次数
         
         while time.time() - start_time < timeout:
