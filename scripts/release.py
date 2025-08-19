@@ -152,9 +152,18 @@ class ReleaseManager:
         print("📤 推送到 GitHub...")
         
         try:
-            # 推送主分支
-            subprocess.run(["git", "push", "origin", "master"], check=True)
-            print("✅ 已推送主分支")
+            # 获取当前分支名
+            result = subprocess.run(
+                ["git", "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            current_branch = result.stdout.strip()
+            
+            # 推送当前分支
+            subprocess.run(["git", "push", "origin", current_branch], check=True)
+            print(f"✅ 已推送分支 {current_branch}")
             
             # 推送标签
             subprocess.run(["git", "push", "origin", f"v{version}"], check=True)
@@ -234,8 +243,20 @@ class ReleaseManager:
             # 7. 等待 GitHub Actions
             self.wait_for_github_actions(new_version)
         else:
+            # 获取当前分支名用于显示
+            try:
+                result = subprocess.run(
+                    ["git", "branch", "--show-current"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                current_branch = result.stdout.strip()
+            except:
+                current_branch = "main"  # 默认分支名
+                
             print("\n📋 手动推送命令:")
-            print(f"   git push origin master")
+            print(f"   git push origin {current_branch}")
             print(f"   git push origin v{new_version}")
         
         print(f"\n🎉 发布流程完成! 版本: {new_version}")
@@ -289,7 +310,8 @@ def interactive_release():
     
     skip_tests = input("跳过测试? (y/N): ").strip().lower() in ['y', 'yes']
     skip_build = input("跳过构建? (y/N): ").strip().lower() in ['y', 'yes']
-    auto_push = input("自动推送到 GitHub? (y/N): ").strip().lower() in ['y', 'yes']
+    auto_push_input = input("自动推送到 GitHub? (Y/n): ").strip().lower()
+    auto_push = auto_push_input not in ['n', 'no']  # 默认为 True
     
     message = input("发布消息 (可选): ").strip()
     if not message:
