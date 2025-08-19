@@ -72,27 +72,25 @@ jobs:
 
 ## 快速开始
 
-## 1. 下载 integrated_script.exe
-## 2. 双击运行或在命令行中使用
-## 3. 使用 --help 查看帮助信息
+• 下载 integrated_script.exe
+• 双击运行或在命令行中使用
+• 使用 --help 查看帮助信息
 
 ## 系统要求
 
-- Windows 7/8/10/11 (64位)
-- 无需安装 Python 环境
+• Windows 7/8/10/11 (64位)
+• 无需安装 Python 环境
 
 ## 使用示例
 
-```bash
-# 启动交互式界面
+启动交互式界面:
 integrated_script.exe --interactive
 
-# YOLO数据集验证
+YOLO数据集验证:
 integrated_script.exe yolo validate /path/to/dataset
 
-# 图像格式转换
+图像格式转换:
 integrated_script.exe image convert /path/to/images
-```
 
 更多信息请查看 README.md
 "@ | Out-File -FilePath "release/使用说明.txt" -Encoding UTF8
