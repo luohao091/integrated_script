@@ -229,8 +229,13 @@ class ReleaseManager:
         print(f"   可以在以下链接查看进度:")
         print(f"   https://github.com/luohao091/integrated_script/actions")
         
+        # 等待GitHub触发新的工作流（标签推送后需要一些时间）
+        print("   🕐 等待 GitHub 触发新工作流...")
+        time.sleep(15)  # 等待15秒让GitHub有时间触发工作流
+        
         start_time = time.time()
         check_interval = 30  # 每30秒检查一次
+        consecutive_old_workflow_count = 0  # 连续找到旧工作流的次数
         
         while time.time() - start_time < timeout:
             # 获取工作流状态
@@ -241,37 +246,46 @@ class ReleaseManager:
                 break
             elif status_info.get('status') == 'not_found':
                 print("   🔍 等待工作流启动...")
+                consecutive_old_workflow_count = 0
             elif status_info.get('status') == 'queued':
                 branch_info = f" (分支: {status_info.get('head_branch', 'unknown')})" if status_info.get('head_branch') else ""
                 print(f"   ⏳ 工作流已排队等待执行{branch_info}")
+                consecutive_old_workflow_count = 0
             elif status_info.get('status') == 'in_progress':
                 branch_info = f" (分支: {status_info.get('head_branch', 'unknown')})" if status_info.get('head_branch') else ""
                 print(f"   🔄 工作流正在执行中{branch_info}")
                 if status_info.get('is_latest') and status_info.get('head_branch') != f"v{version}":
                     print(f"   ⚠️  注意: 正在监控最新工作流，可能不是当前版本 v{version} 的工作流")
+                consecutive_old_workflow_count = 0
             elif status_info.get('status') == 'completed':
                 conclusion = status_info.get('conclusion')
                 branch_info = f" (分支: {status_info.get('head_branch', 'unknown')})" if status_info.get('head_branch') else ""
                 
-                if conclusion == 'success':
-                    print(f"   ✅ GitHub Actions 构建成功!{branch_info}")
-                    if status_info.get('html_url'):
-                        print(f"   🔗 查看详情: {status_info['html_url']}")
-                    
-                    # 检查是否是正确的版本
-                    if status_info.get('is_latest') and status_info.get('head_branch') != f"v{version}":
-                        print(f"   ⚠️  注意: 完成的工作流分支 ({status_info.get('head_branch')}) 与当前版本 (v{version}) 不匹配")
-                        print(f"   💡 建议检查 GitHub Actions 页面确认正确的工作流状态")
-                    
-                    return True
-                elif conclusion == 'failure':
-                    print(f"   ❌ GitHub Actions 构建失败!{branch_info}")
-                    if status_info.get('html_url'):
-                        print(f"   🔗 查看详情: {status_info['html_url']}")
-                    return False
+                # 检查是否是目标版本的工作流
+                if status_info.get('head_branch') == f"v{version}":
+                    # 这是目标版本的工作流
+                    if conclusion == 'success':
+                        print(f"   ✅ GitHub Actions 构建成功!{branch_info}")
+                        if status_info.get('html_url'):
+                            print(f"   🔗 查看详情: {status_info['html_url']}")
+                        return True
+                    elif conclusion == 'failure':
+                        print(f"   ❌ GitHub Actions 构建失败!{branch_info}")
+                        if status_info.get('html_url'):
+                            print(f"   🔗 查看详情: {status_info['html_url']}")
+                        return False
+                    else:
+                        print(f"   ⚠️  工作流完成，状态: {conclusion}{branch_info}")
+                        return False
                 else:
-                    print(f"   ⚠️  工作流完成，状态: {conclusion}{branch_info}")
-                    return False
+                    # 这是旧版本的工作流，继续等待
+                    consecutive_old_workflow_count += 1
+                    if consecutive_old_workflow_count == 1:
+                        print(f"   🔍 发现旧工作流 {branch_info}，继续等待目标版本 v{version} 的工作流...")
+                    elif consecutive_old_workflow_count >= 5:
+                        print(f"   ⚠️  连续5次检查都是旧工作流，可能新工作流触发失败")
+                        print(f"   💡 建议手动检查 GitHub Actions 页面: https://github.com/luohao091/integrated_script/actions")
+                        return True  # 避免无限等待
             
             # 等待下次检查
             elapsed = int(time.time() - start_time)
