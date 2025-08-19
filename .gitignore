@@ -201,7 +201,6 @@ Thumbs.db
 /cache/
 
 # Source directory specific
-src/logs/
 src/temp/
 src/test_*/
 src/labels/
@@ -316,7 +315,6 @@ Thumbs.db
 
 # Log files
 *.log
-logs/
 
 # Runtime
 *.pid
