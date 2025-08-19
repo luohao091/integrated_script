@@ -12,21 +12,21 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-      
+
     - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-          
+
     - name: Install dependencies
       run: |
         pip install -r requirements.txt pyinstaller
-        
+
     - name: Build executable
       run: python build_exe.py
-        
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:

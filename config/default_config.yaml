@@ -28,20 +28,20 @@ file_processing:
     - ".bmp"
     - ".tiff"
     - ".webp"
-  
+
   # 支持的标签格式
   supported_label_formats:
     - ".txt"
     - ".xml"
     - ".json"
-  
+
   # 默认输出目录
   default_output_dir: "./output"
-  
+
   # 文件操作安全设置
   backup_before_delete: true
   confirm_destructive_operations: true
-  
+
   # 批处理设置
   batch_size: 100
   progress_update_interval: 10
@@ -50,20 +50,20 @@ file_processing:
 yolo:
   # 默认类别名称文件
   default_classes_file: "classes.txt"
-  
+
   # 验证设置
   validation:
     check_image_integrity: true
     check_label_format: true
     check_class_consistency: true
     max_errors_to_report: 50
-  
+
   # 清理设置
   cleanup:
     remove_empty_labels: true
     remove_orphaned_files: true
     remove_zero_only_labels: false  # 是否删除只包含类别0的标签
-  
+
   # 数据集分割设置
   split:
     train_ratio: 0.7
@@ -76,18 +76,18 @@ yolo:
 image_processing:
   # 默认输出格式
   default_output_format: "jpg"
-  
+
   # 质量设置
   jpeg_quality: 95
   png_compression: 6
   webp_quality: 90
-  
+
   # 尺寸调整设置
   resize:
     maintain_aspect_ratio: true
     interpolation: "LANCZOS"  # NEAREST, BILINEAR, BICUBIC, LANCZOS
     default_size: [640, 640]
-  
+
   # 清晰度分析设置
   quality_analysis:
     # 清晰度级别定义（按分辨率从高到低排序）
@@ -104,11 +104,11 @@ image_processing:
       - name: "标清"          # 标清
         threshold: [720, 480]
     # 注意：低于最低阈值（720x480）的图像将被标记为"低清"
-  
+
   # 处理选项
   auto_orient: true
   strip_metadata: false
-  
+
   # 批处理设置
   parallel_processing: true
   chunk_size: 50
@@ -121,18 +121,18 @@ dataset_processing:
     - "coco"
     - "pascal_voc"
     - "csv"
-  
+
   # 验证设置
   validation:
     check_file_existence: true
     check_format_consistency: true
     generate_statistics: true
-  
+
   # 转换设置
   conversion:
     preserve_original: true
     create_backup: true
-  
+
   # 分析设置
   analysis:
     generate_class_distribution: true
@@ -143,13 +143,13 @@ dataset_processing:
 label_processing:
   # 坐标格式
   coordinate_format: "normalized"  # normalized, absolute
-  
+
   # 过滤设置
   filtering:
     min_bbox_area: 0.0001  # 最小边界框面积（归一化）
     max_bbox_area: 1.0     # 最大边界框面积（归一化）
     filter_invalid_coords: true
-  
+
   # 转换设置
   conversion:
     flip_horizontal: false
@@ -164,7 +164,7 @@ ui:
     show_progress: true
     confirm_operations: true
     max_menu_items: 20
-  
+
   # CLI设置
   cli:
     show_progress: true
@@ -176,11 +176,11 @@ performance:
   # 内存管理
   max_memory_usage: "1GB"  # 最大内存使用量
   gc_threshold: 1000       # 垃圾回收阈值
-  
+
   # 并发设置
   max_concurrent_files: 10
   thread_pool_size: 4
-  
+
   # 缓存设置
   enable_caching: true
   cache_size: 100
@@ -201,11 +201,11 @@ security:
     - ".json"
     - ".yaml"
     - ".yml"
-  
+
   # 路径限制
   restrict_to_project_dir: false
   max_path_length: 260
-  
+
   # 操作限制
   max_file_size: "100MB"
   max_files_per_operation: 10000
@@ -215,12 +215,12 @@ output:
   # 目录结构
   create_subdirectories: true
   preserve_directory_structure: true
-  
+
   # 文件命名
   add_timestamp: false
   add_suffix: false
   default_suffix: "_processed"
-  
+
   # 报告生成
   generate_reports: true
   report_format: "txt"  # txt, json, html
@@ -231,11 +231,11 @@ error_handling:
   # 错误策略
   on_error: "continue"  # stop, continue, skip
   max_errors: 100
-  
+
   # 重试设置
   retry_attempts: 3
   retry_delay: 1.0  # 秒
-  
+
   # 错误报告
   save_error_log: true
   error_log_file: "errors.log"

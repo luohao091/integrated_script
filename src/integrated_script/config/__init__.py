@@ -7,16 +7,16 @@ Configuration Module
 """
 
 from .exceptions import (
-    ProcessingError,
-    PathError,
-    FileProcessingError,
     ConfigurationError,
+    FileProcessingError,
+    PathError,
+    ProcessingError,
 )
 from .settings import ConfigManager
 
 __all__ = [
     "ProcessingError",
-    "PathError", 
+    "PathError",
     "FileProcessingError",
     "ConfigurationError",
     "ConfigManager",

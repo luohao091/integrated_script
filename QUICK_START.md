@@ -22,9 +22,9 @@ git push -u origin master
 
 ### 2. 一键发布（推荐）
 
-```cmd
-# Windows 用户直接双击或运行
-release.bat
+```bash
+# 使用 Python 发布脚本
+python scripts/release.py
 ```
 
 这个脚本会：
@@ -132,7 +132,7 @@ git push origin v1.0.1
    ```bash
    # 检查远程仓库配置
    git remote -v
-   
+
    # 检查认证
    git config --global user.name "Your Name"
    git config --global user.email "your.email@example.com"
@@ -142,7 +142,7 @@ git push origin v1.0.1
    ```bash
    # 检查依赖
    pip install -r requirements.txt
-   
+
    # 手动测试构建
    python build_exe.py
    ```
@@ -178,7 +178,7 @@ python main.py --help
    - 记录重要更改
 
 3. **自动化优先**
-   - 优先使用 `release.bat` 一键发布
+   - 优先使用 `python scripts/release.py` 一键发布
    - 让 GitHub Actions 处理构建
    - 定期检查自动化流程
 
