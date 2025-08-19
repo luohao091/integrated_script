@@ -75,13 +75,34 @@ class VersionManager:
         """更新 pyproject.toml 中的版本号"""
         content = self.pyproject_file.read_text(encoding='utf-8')
         
-        # 更新版本号
-        new_content = re.sub(
-            r'version\s*=\s*["\'][^"\'\']*["\']',
-            f'version = "{new_version}"',
-            content
-        )
+        # 只更新 [project] 部分的版本号，避免误改工具配置
+        # 使用更精确的正则表达式，确保在 [project] 部分内
+        lines = content.split('\n')
+        new_lines = []
+        in_project_section = False
         
+        for line in lines:
+            # 检测是否进入 [project] 部分
+            if line.strip() == '[project]':
+                in_project_section = True
+                new_lines.append(line)
+            # 检测是否离开 [project] 部分（遇到新的 [section]）
+            elif line.strip().startswith('[') and line.strip() != '[project]':
+                in_project_section = False
+                new_lines.append(line)
+            # 在 [project] 部分内且匹配 version = "..." 的行
+            elif in_project_section and re.match(r'^\s*version\s*=\s*["\']', line):
+                # 替换版本号
+                new_line = re.sub(
+                    r'(^\s*version\s*=\s*)["\'][^"\'\']*["\']',
+                    f'\\1"{new_version}"',
+                    line
+                )
+                new_lines.append(new_line)
+            else:
+                new_lines.append(line)
+        
+        new_content = '\n'.join(new_lines)
         self.pyproject_file.write_text(new_content, encoding='utf-8')
         print(f"✅ 已更新 pyproject.toml 版本号: {new_version}")
     
