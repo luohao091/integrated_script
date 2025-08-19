@@ -189,16 +189,33 @@ class ReleaseManager:
             
             data = response.json()
             
-            # 查找与当前版本相关的工作流
+            # 首先查找与当前版本完全匹配的工作流
+            target_branch = f"v{version}"
             for run in data.get('workflow_runs', []):
-                if f"v{version}" in run.get('head_branch', '') or run.get('event') == 'push':
+                if run.get('head_branch') == target_branch and run.get('event') == 'push':
                     return {
                         'status': run.get('status'),
                         'conclusion': run.get('conclusion'),
                         'html_url': run.get('html_url'),
                         'created_at': run.get('created_at'),
-                        'updated_at': run.get('updated_at')
+                        'updated_at': run.get('updated_at'),
+                        'name': run.get('name'),
+                        'head_branch': run.get('head_branch')
                     }
+            
+            # 如果没找到精确匹配，返回最新的工作流（可能是刚触发的）
+            if data.get('workflow_runs'):
+                latest_run = data['workflow_runs'][0]
+                return {
+                    'status': latest_run.get('status'),
+                    'conclusion': latest_run.get('conclusion'),
+                    'html_url': latest_run.get('html_url'),
+                    'created_at': latest_run.get('created_at'),
+                    'updated_at': latest_run.get('updated_at'),
+                    'name': latest_run.get('name'),
+                    'head_branch': latest_run.get('head_branch'),
+                    'is_latest': True
+                }
             
             return {'status': 'not_found'}
             
@@ -225,23 +242,35 @@ class ReleaseManager:
             elif status_info.get('status') == 'not_found':
                 print("   🔍 等待工作流启动...")
             elif status_info.get('status') == 'queued':
-                print("   ⏳ 工作流已排队等待执行")
+                branch_info = f" (分支: {status_info.get('head_branch', 'unknown')})" if status_info.get('head_branch') else ""
+                print(f"   ⏳ 工作流已排队等待执行{branch_info}")
             elif status_info.get('status') == 'in_progress':
-                print("   🔄 工作流正在执行中")
+                branch_info = f" (分支: {status_info.get('head_branch', 'unknown')})" if status_info.get('head_branch') else ""
+                print(f"   🔄 工作流正在执行中{branch_info}")
+                if status_info.get('is_latest') and status_info.get('head_branch') != f"v{version}":
+                    print(f"   ⚠️  注意: 正在监控最新工作流，可能不是当前版本 v{version} 的工作流")
             elif status_info.get('status') == 'completed':
                 conclusion = status_info.get('conclusion')
+                branch_info = f" (分支: {status_info.get('head_branch', 'unknown')})" if status_info.get('head_branch') else ""
+                
                 if conclusion == 'success':
-                    print("   ✅ GitHub Actions 构建成功!")
+                    print(f"   ✅ GitHub Actions 构建成功!{branch_info}")
                     if status_info.get('html_url'):
                         print(f"   🔗 查看详情: {status_info['html_url']}")
+                    
+                    # 检查是否是正确的版本
+                    if status_info.get('is_latest') and status_info.get('head_branch') != f"v{version}":
+                        print(f"   ⚠️  注意: 完成的工作流分支 ({status_info.get('head_branch')}) 与当前版本 (v{version}) 不匹配")
+                        print(f"   💡 建议检查 GitHub Actions 页面确认正确的工作流状态")
+                    
                     return True
                 elif conclusion == 'failure':
-                    print("   ❌ GitHub Actions 构建失败!")
+                    print(f"   ❌ GitHub Actions 构建失败!{branch_info}")
                     if status_info.get('html_url'):
                         print(f"   🔗 查看详情: {status_info['html_url']}")
                     return False
                 else:
-                    print(f"   ⚠️  工作流完成，状态: {conclusion}")
+                    print(f"   ⚠️  工作流完成，状态: {conclusion}{branch_info}")
                     return False
             
             # 等待下次检查
