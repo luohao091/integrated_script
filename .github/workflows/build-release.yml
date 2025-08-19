@@ -1,168 +1,32 @@
 name: Build and Release
 
-# 当推送标签时触发
 on:
   push:
     tags:
-      - 'v*.*.*'  # 匹配 v1.0.0 格式的标签
-  workflow_dispatch:  # 允许手动触发
+      - 'v*.*.*'
+  workflow_dispatch:
 
 jobs:
   build-windows:
     runs-on: windows-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        
-    - name: Cache pip dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
           
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+        pip install -r requirements.txt pyinstaller
         
     - name: Build executable
-      run: |
-        python build_exe.py
-        
-    - name: Verify build
-      run: |
-        if (Test-Path "dist/integrated_script.exe") {
-          Write-Host "✅ Build successful"
-          $size = (Get-Item "dist/integrated_script.exe").Length / 1MB
-          Write-Host "📦 File size: $([math]::Round($size, 2)) MB"
-        } else {
-          Write-Host "❌ Build failed - executable not found"
-          exit 1
-        }
-        
-    - name: Test executable
-      run: |
-        # 测试可执行文件是否能正常运行
-        ./dist/integrated_script.exe --version
-        
-    - name: Prepare release assets
-      run: |
-        # 创建发布目录
-        New-Item -ItemType Directory -Force -Path "release"
-        
-        # 复制可执行文件
-        Copy-Item "dist/integrated_script.exe" "release/"
-        
-        # 复制说明文件
-        Copy-Item "README.md" "release/"
-        Copy-Item "LICENSE" "release/"
-        
-        # 创建使用说明
-        @"
-# 集成脚本工具 使用说明
-
-## 快速开始
-
-- 下载 integrated_script.exe
-- 双击运行或在命令行中使用
-- 使用 --help 查看帮助信息
-
-## 系统要求
-
-- Windows 7/8/10/11 (64位)
-- 无需安装 Python 环境
-
-## 使用示例
-
-启动交互式界面:
-integrated_script.exe --interactive
-
-YOLO数据集验证:
-integrated_script.exe yolo validate /path/to/dataset
-
-图像格式转换:
-integrated_script.exe image convert /path/to/images
-
-更多信息请查看 README.md
-"@ | Out-File -FilePath "release/使用说明.txt" -Encoding UTF8
-        
-    - name: Create ZIP archive
-      run: |
-        Compress-Archive -Path "release/*" -DestinationPath "integrated_script_${{ github.ref_name }}_windows.zip"
-        
-    - name: Generate release notes
-      id: release_notes
-      run: |
-        $tag = "${{ github.ref_name }}"
-        $notes = @"
-## 🎉 集成脚本工具 $tag
-
-### 📥 下载
-
-- **Windows 可执行文件**: integrated_script_${tag}_windows.zip
-- **单独可执行文件**: integrated_script.exe
-
-### 🚀 新功能
-
-- YOLO 数据集处理和验证
-- 图像批量处理和格式转换
-- 智能文件组织和管理
-- 标签文件创建和编辑
-- 交互式和命令行双模式操作
-
-### 💻 系统要求
-
-- Windows 7/8/10/11 (64位系统)
-- 无需安装 Python 环境
-
-### 🔧 使用方法
-
-1. 下载并解压 ZIP 文件
-2. 双击 `integrated_script.exe` 启动
-3. 或在命令行中使用: `integrated_script.exe --help`
-
-### 📝 更新日志
-
-- 优化了打包配置
-- 改进了错误处理
-- 增强了跨平台兼容性
-
----
-
-**完整源代码**: [GitHub Repository](https://github.com/${{ github.repository }})
-"@
-        echo "RELEASE_NOTES<<EOF" >> $env:GITHUB_OUTPUT
-        echo $notes >> $env:GITHUB_OUTPUT
-        echo "EOF" >> $env:GITHUB_OUTPUT
+      run: python build_exe.py
         
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        name: "集成脚本工具 ${{ github.ref_name }}"
-        body: ${{ steps.release_notes.outputs.RELEASE_NOTES }}
-        files: |
-          integrated_script_${{ github.ref_name }}_windows.zip
-          dist/integrated_script.exe
-        draft: false
-        prerelease: false
-        generate_release_notes: false
+        files: dist/integrated_script.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-executable
-        path: |
-          dist/integrated_script.exe
-          integrated_script_${{ github.ref_name }}_windows.zip
-        retention-days: 30
