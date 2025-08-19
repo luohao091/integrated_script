@@ -72,14 +72,14 @@ jobs:
 
 ## 快速开始
 
-• 下载 integrated_script.exe
-• 双击运行或在命令行中使用
-• 使用 --help 查看帮助信息
+- 下载 integrated_script.exe
+- 双击运行或在命令行中使用
+- 使用 --help 查看帮助信息
 
 ## 系统要求
 
-• Windows 7/8/10/11 (64位)
-• 无需安装 Python 环境
+- Windows 7/8/10/11 (64位)
+- 无需安装 Python 环境
 
 ## 使用示例
 
