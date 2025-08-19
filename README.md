@@ -82,7 +82,7 @@ python main.py label create /path/to/images
 
 ### 可执行文件使用
 
-从 [Releases](https://github.com/luohao091/integrated-script/releases) 页面下载最新的 `integrated_script.exe` 文件，直接运行：
+从 [Releases](https://github.com/luohao091/integrated_script/releases) 页面下载最新的 `integrated_script.exe` 文件，直接运行：
 
 ```cmd
 # Windows 命令行
@@ -146,7 +146,7 @@ integrated_script/
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/integrated-script.git
+git clone https://github.com/luohao091/integrated_script
 cd integrated-script
 
 # 创建虚拟环境
@@ -238,7 +238,7 @@ mypy src/
 
 ## 👥 作者
 
-- **Integrated Script Team** - *初始工作* - [team@example.com](mailto:team@example.com)
+- **luohao091** - *初始工作* - [luohao.622@gmail.com](mailto:luohao.622@gmail.com)
 
 ## 🙏 致谢
 
