@@ -1,34 +1,36 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-main.py
+Integrated Script Main Entry Point
 
-项目主入口脚本
-
-这是项目的主要入口点，可以直接运行或通过模块方式调用。
+这是集成脚本的主入口点，负责设置环境和启动应用程序。
 """
 
-import sys
 import os
+import sys
 
-# 添加src目录到Python路径
-src_path = os.path.join(os.path.dirname(__file__), 'src')
+# 添加 src 目录到 Python 路径
+src_path = os.path.join(os.path.dirname(__file__), "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-# 初始化Windows兼容性（在导入其他模块之前）
-if sys.platform == 'win32':
+# Windows 兼容性处理
+if sys.platform == "win32":
     try:
-        from integrated_script.core.windows_compat import initialize_windows_compatibility
+        from integrated_script.core.windows_compat import (
+            initialize_windows_compatibility,
+        )
+
         compat_result = initialize_windows_compatibility()
-        # 可选：显示兼容性初始化结果（仅在调试模式下）
-        if '--debug-compat' in sys.argv:
+        # 调试模式下显示兼容性初始化结果
+        if "--debug-compat" in sys.argv:
             print(f"Windows兼容性初始化: {compat_result}")
     except Exception as e:
         # 如果兼容性初始化失败，继续运行但给出警告
         print(f"警告: Windows兼容性初始化失败: {e}")
 
+# 导入主函数
 from integrated_script.main import main
-  
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     sys.exit(main())

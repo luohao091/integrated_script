@@ -154,8 +154,7 @@ python -m venv venv
 venv\Scripts\activate  # Windows
 
 # 安装开发依赖
-pip install -e .
-pip install -r requirements-dev.txt
+pip install -e .[dev]
 ```
 
 ### 自动化发布
@@ -164,9 +163,9 @@ pip install -r requirements-dev.txt
 
 #### 快速发布（推荐）
 
-```cmd
-# Windows 一键发布
-release.bat
+```bash
+# 使用 Python 发布脚本
+python scripts/release.py
 ```
 
 #### 手动发布

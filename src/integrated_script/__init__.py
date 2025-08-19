@@ -22,15 +22,16 @@ __author__ = "Integrated Script Team"
 __email__ = "team@example.com"
 __license__ = "MIT"
 
-# 导入主要类和函数
-from .core.base import BaseProcessor
 from .config.exceptions import (
-    ProcessingError,
-    PathError,
-    FileProcessingError,
     ConfigurationError,
+    FileProcessingError,
+    PathError,
+    ProcessingError,
 )
 from .config.settings import ConfigManager
+
+# 导入主要类和函数
+from .core.base import BaseProcessor
 
 # 定义公共API
 __all__ = [

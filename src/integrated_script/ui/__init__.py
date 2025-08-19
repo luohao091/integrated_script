@@ -12,11 +12,7 @@ from .cli import CLIInterface
 from .interactive import InteractiveInterface
 from .menu import MenuSystem
 
-__all__ = [
-    'CLIInterface',
-    'InteractiveInterface', 
-    'MenuSystem'
-]
+__all__ = ["CLIInterface", "InteractiveInterface", "MenuSystem"]
 
-__version__ = '1.0.0'
-__author__ = 'Integrated Script Team'
+__version__ = "1.0.0"
+__author__ = "Integrated Script Team"

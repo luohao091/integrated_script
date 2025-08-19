@@ -44,12 +44,13 @@ lint:
 	flake8 src/integrated_script tests/
 
 format:
-	black src/integrated_script tests/ examples/
-	isort src/integrated_script tests/ examples/
+	python scripts/format_code.py --format-only
 
 format-check:
-	black --check src/integrated_script tests/ examples/
-	isort --check-only src/integrated_script tests/ examples/
+	python scripts/format_code.py --check-only
+
+format-all:
+	python scripts/format_code.py
 
 type-check:
 	mypy src/integrated_script
