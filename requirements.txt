@@ -6,6 +6,7 @@ tqdm>=4.64.0          # Progress bars
 Pillow>=9.0.0         # Image processing
 opencv-python>=4.5.0  # Computer vision
 PyYAML>=6.0           # YAML configuration support
+requests>=2.28.0      # HTTP requests for GitHub API
 
 # Note: Optional dependencies (numpy, pandas, matplotlib) are defined in pyproject.toml
 # Install with: pip install -e .[optional] for optional dependencies

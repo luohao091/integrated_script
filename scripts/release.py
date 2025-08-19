@@ -12,8 +12,10 @@ import os
 import sys
 import subprocess
 import time
+import requests
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 # 添加脚本目录到路径
 sys.path.insert(0, str(Path(__file__).parent))
@@ -175,21 +177,79 @@ class ReleaseManager:
             print(f"❌ 推送失败: {e}")
             return False
     
+    def get_github_workflow_status(self, version: str) -> Dict[str, Any]:
+        """获取 GitHub Actions 工作流状态"""
+        try:
+            # GitHub API URL
+            api_url = "https://api.github.com/repos/luohao091/integrated_script/actions/runs"
+            
+            # 发送请求
+            response = requests.get(api_url, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # 查找与当前版本相关的工作流
+            for run in data.get('workflow_runs', []):
+                if f"v{version}" in run.get('head_branch', '') or run.get('event') == 'push':
+                    return {
+                        'status': run.get('status'),
+                        'conclusion': run.get('conclusion'),
+                        'html_url': run.get('html_url'),
+                        'created_at': run.get('created_at'),
+                        'updated_at': run.get('updated_at')
+                    }
+            
+            return {'status': 'not_found'}
+            
+        except Exception as e:
+            print(f"⚠️  无法获取 GitHub Actions 状态: {e}")
+            return {'status': 'error', 'error': str(e)}
+    
     def wait_for_github_actions(self, version: str, timeout: int = 600) -> bool:
         """等待 GitHub Actions 完成"""
         print("⏳ 等待 GitHub Actions 构建完成...")
         print(f"   可以在以下链接查看进度:")
         print(f"   https://github.com/luohao091/integrated_script/actions")
         
-        # 简单的等待，实际项目中可以通过 GitHub API 检查状态
-        for i in range(timeout // 30):
-            print(f"   等待中... ({i * 30}s/{timeout}s)")
-            time.sleep(30)
+        start_time = time.time()
+        check_interval = 30  # 每30秒检查一次
+        
+        while time.time() - start_time < timeout:
+            # 获取工作流状态
+            status_info = self.get_github_workflow_status(version)
             
-            # 这里可以添加 GitHub API 调用来检查 Actions 状态
-            # 为了简化，我们只是等待一段时间
+            if status_info.get('status') == 'error':
+                print("⚠️  API 检查失败，切换到简单等待模式")
+                break
+            elif status_info.get('status') == 'not_found':
+                print("   🔍 等待工作流启动...")
+            elif status_info.get('status') == 'queued':
+                print("   ⏳ 工作流已排队等待执行")
+            elif status_info.get('status') == 'in_progress':
+                print("   🔄 工作流正在执行中")
+            elif status_info.get('status') == 'completed':
+                conclusion = status_info.get('conclusion')
+                if conclusion == 'success':
+                    print("   ✅ GitHub Actions 构建成功!")
+                    if status_info.get('html_url'):
+                        print(f"   🔗 查看详情: {status_info['html_url']}")
+                    return True
+                elif conclusion == 'failure':
+                    print("   ❌ GitHub Actions 构建失败!")
+                    if status_info.get('html_url'):
+                        print(f"   🔗 查看详情: {status_info['html_url']}")
+                    return False
+                else:
+                    print(f"   ⚠️  工作流完成，状态: {conclusion}")
+                    return False
             
-        print("⏰ 等待时间结束，请手动检查 GitHub Actions 状态")
+            # 等待下次检查
+            elapsed = int(time.time() - start_time)
+            print(f"   等待中... ({elapsed}s/{timeout}s)")
+            time.sleep(check_interval)
+        
+        print("⏰ 等待超时，请手动检查 GitHub Actions 状态")
         return True
     
     def release(self, version_type: str = "patch", 
