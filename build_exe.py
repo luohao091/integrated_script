@@ -3,9 +3,9 @@
 """
 build_exe.py
 
-PyInstaller打包脚本
+PyInstaller build script
 
-用于将integrated_script项目打包为Windows可执行文件
+Used to package integrated_script project as Windows executable
 """
 
 import os
@@ -14,41 +14,41 @@ import shutil
 from pathlib import Path
 
 def build_exe():
-    """构建可执行文件"""
+    """Build executable file"""
     
-    # 项目根目录 - build_exe.py文件所在的目录
-    script_dir = Path(__file__).parent  # build_exe.py文件所在目录
-    project_root = script_dir  # 项目根目录就是build_exe.py所在目录
+    # Project root directory - directory where build_exe.py is located
+    script_dir = Path(__file__).parent  # Directory where build_exe.py is located
+    project_root = script_dir  # Project root is the directory where build_exe.py is located
     src_dir = script_dir / "src"
     main_script = script_dir / "main.py"
     
-    # 确保主脚本存在
+    # Ensure main script exists
     if not main_script.exists():
-        print(f"错误: 找不到主脚本 {main_script}")
+        print(f"Error: Main script not found {main_script}")
         return False
     
-    # 清理之前的构建
+    # Clean previous builds
     build_dir = project_root / "build"
     dist_dir = project_root / "dist"
     
-    # 只清理build目录，dist目录让PyInstaller自动处理
+    # Only clean build directory, let PyInstaller handle dist directory automatically
     if build_dir.exists():
         try:
             shutil.rmtree(build_dir)
         except PermissionError:
-            print("警告: 无法删除build目录，继续执行...")
+            print("Warning: Cannot delete build directory, continuing...")
     
-    # PyInstaller命令
+    # PyInstaller command
     cmd_parts = [
         "pyinstaller",
-        "--onefile",  # 打包为单个exe文件
-        "--console",  # 显示控制台窗口
-        "--name=integrated_script",  # 可执行文件名称
-        f"--distpath={project_root / 'dist'}",  # 指定输出目录到项目根目录
-        f"--workpath={project_root / 'build'}",  # 指定工作目录到项目根目录
-        f"--add-data={src_dir};src",  # 添加源代码目录
-        f"--add-data={script_dir / 'requirements.txt'};.",  # 添加requirements.txt
-        f"--add-data={script_dir / 'config'};config",  # 添加配置目录
+        "--onefile",  # Package as single exe file
+        "--console",  # Show console window
+        "--name=integrated_script",  # Executable file name
+        f"--distpath={project_root / 'dist'}",  # Specify output directory to project root
+        f"--workpath={project_root / 'build'}",  # Specify work directory to project root
+        f"--add-data={src_dir};src",  # Add source code directory
+        f"--add-data={script_dir / 'requirements.txt'};.",  # Add requirements.txt
+        f"--add-data={script_dir / 'config'};config",  # Add config directory
         "--hidden-import=integrated_script",
         "--hidden-import=integrated_script.config",
         "--hidden-import=integrated_script.core",
@@ -69,32 +69,32 @@ def build_exe():
         str(main_script)
     ]
     
-    # 执行PyInstaller命令
+    # Execute PyInstaller command
     cmd = " ".join(cmd_parts)
-    print(f"执行命令: {cmd}")
+    print(f"Executing command: {cmd}")
     
     result = os.system(cmd)
     
     if result == 0:
         exe_path = project_root / "dist" / "integrated_script.exe"
         if exe_path.exists():
-            print(f"\n✅ 打包成功!")
-            print(f"可执行文件位置: {exe_path}")
-            print(f"文件大小: {exe_path.stat().st_size / 1024 / 1024:.1f} MB")
+            print(f"\nBuild successful!")
+            print(f"Executable location: {exe_path}")
+            print(f"File size: {exe_path.stat().st_size / 1024 / 1024:.1f} MB")
             return True
         else:
-            print("❌ 打包失败: 找不到生成的exe文件")
-            print(f"预期位置: {exe_path}")
+            print("Build failed: Generated exe file not found")
+            print(f"Expected location: {exe_path}")
             return False
     else:
-        print("❌ 打包失败: PyInstaller执行出错")
+        print("Build failed: PyInstaller execution error")
         return False
 
 if __name__ == "__main__":
-    print("开始打包integrated_script项目...")
+    print("Building integrated_script project...")
     success = build_exe()
     if success:
-        print("\n🎉 打包完成!")
+        print("\nBuild completed successfully!")
     else:
-        print("\n💥 打包失败!")
+        print("\nBuild failed!")
         sys.exit(1)
