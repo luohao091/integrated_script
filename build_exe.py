@@ -16,10 +16,11 @@ from pathlib import Path
 def build_exe():
     """构建可执行文件"""
     
-    # 项目根目录
-    project_root = Path(__file__).parent
-    src_dir = project_root / "src"
-    main_script = project_root / "main.py"
+    # 项目根目录 - build_exe.py文件所在的目录
+    script_dir = Path(__file__).parent  # build_exe.py文件所在目录
+    project_root = script_dir  # 项目根目录就是build_exe.py所在目录
+    src_dir = script_dir / "src"
+    main_script = script_dir / "main.py"
     
     # 确保主脚本存在
     if not main_script.exists():
@@ -43,9 +44,11 @@ def build_exe():
         "--onefile",  # 打包为单个exe文件
         "--console",  # 显示控制台窗口
         "--name=integrated_script",  # 可执行文件名称
+        f"--distpath={project_root / 'dist'}",  # 指定输出目录到项目根目录
+        f"--workpath={project_root / 'build'}",  # 指定工作目录到项目根目录
         f"--add-data={src_dir};src",  # 添加源代码目录
-        f"--add-data={project_root / 'requirements.txt'};.",  # 添加requirements.txt
-        f"--add-data={project_root / 'config'};config",  # 添加配置目录
+        f"--add-data={script_dir / 'requirements.txt'};.",  # 添加requirements.txt
+        f"--add-data={script_dir / 'config'};config",  # 添加配置目录
         "--hidden-import=integrated_script",
         "--hidden-import=integrated_script.config",
         "--hidden-import=integrated_script.core",
@@ -73,7 +76,7 @@ def build_exe():
     result = os.system(cmd)
     
     if result == 0:
-        exe_path = dist_dir / "integrated_script.exe"
+        exe_path = project_root / "dist" / "integrated_script.exe"
         if exe_path.exists():
             print(f"\n✅ 打包成功!")
             print(f"可执行文件位置: {exe_path}")
@@ -81,6 +84,7 @@ def build_exe():
             return True
         else:
             print("❌ 打包失败: 找不到生成的exe文件")
+            print(f"预期位置: {exe_path}")
             return False
     else:
         print("❌ 打包失败: PyInstaller执行出错")
