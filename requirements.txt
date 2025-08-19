@@ -1,0 +1,11 @@
+# Integrated Script Project Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+tqdm>=4.64.0          # Progress bars
+Pillow>=9.0.0         # Image processing
+opencv-python>=4.5.0  # Computer vision
+PyYAML>=6.0           # YAML configuration support
+
+# Note: Optional dependencies (numpy, pandas, matplotlib) are defined in pyproject.toml
+# Install with: pip install -e .[optional] for optional dependencies

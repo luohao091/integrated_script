@@ -1,0 +1,253 @@
+# integrated_script 默认配置文件
+# 这是一个示例配置文件，展示了所有可用的配置选项
+
+# 应用程序基本设置
+app:
+  name: "integrated_script"
+  version: "1.0.0"
+  debug: false
+  max_workers: 4  # 并行处理的最大工作线程数
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: null  # 日志文件路径，null表示不写入文件
+  max_file_size: 10485760  # 10MB
+  backup_count: 5
+  enable_color: true
+  console_output: true
+
+# 文件处理配置
+file_processing:
+  # 支持的图像格式
+  supported_image_formats:
+    - ".jpg"
+    - ".jpeg"
+    - ".png"
+    - ".bmp"
+    - ".tiff"
+    - ".webp"
+  
+  # 支持的标签格式
+  supported_label_formats:
+    - ".txt"
+    - ".xml"
+    - ".json"
+  
+  # 默认输出目录
+  default_output_dir: "./output"
+  
+  # 文件操作安全设置
+  backup_before_delete: true
+  confirm_destructive_operations: true
+  
+  # 批处理设置
+  batch_size: 100
+  progress_update_interval: 10
+
+# YOLO数据集处理配置
+yolo:
+  # 默认类别名称文件
+  default_classes_file: "classes.txt"
+  
+  # 验证设置
+  validation:
+    check_image_integrity: true
+    check_label_format: true
+    check_class_consistency: true
+    max_errors_to_report: 50
+  
+  # 清理设置
+  cleanup:
+    remove_empty_labels: true
+    remove_orphaned_files: true
+    remove_zero_only_labels: false  # 是否删除只包含类别0的标签
+  
+  # 数据集分割设置
+  split:
+    train_ratio: 0.7
+    val_ratio: 0.2
+    test_ratio: 0.1
+    shuffle: true
+    seed: 42
+
+# 图像处理配置
+image_processing:
+  # 默认输出格式
+  default_output_format: "jpg"
+  
+  # 质量设置
+  jpeg_quality: 95
+  png_compression: 6
+  webp_quality: 90
+  
+  # 尺寸调整设置
+  resize:
+    maintain_aspect_ratio: true
+    interpolation: "LANCZOS"  # NEAREST, BILINEAR, BICUBIC, LANCZOS
+    default_size: [640, 640]
+  
+  # 清晰度分析设置
+  quality_analysis:
+    # 清晰度级别定义（按分辨率从高到低排序）
+    # 系统会按照阈值从高到低匹配，第一个满足条件的级别将被使用
+    custom_levels:
+      - name: "超高清 4K"          # 超高清 4K
+        threshold: [3840, 2160]
+      - name: "超高清2K"          # 超高清 2K
+        threshold: [2560, 1440]
+      - name: "全高清"     # 全高清
+        threshold: [1920, 1080]
+      - name: "高清"          # 高清
+        threshold: [1280, 720]
+      - name: "标清"          # 标清
+        threshold: [720, 480]
+    # 注意：低于最低阈值（720x480）的图像将被标记为"低清"
+  
+  # 处理选项
+  auto_orient: true
+  strip_metadata: false
+  
+  # 批处理设置
+  parallel_processing: true
+  chunk_size: 50
+
+# 数据集处理配置
+dataset_processing:
+  # 支持的数据集格式
+  supported_formats:
+    - "yolo"
+    - "coco"
+    - "pascal_voc"
+    - "csv"
+  
+  # 验证设置
+  validation:
+    check_file_existence: true
+    check_format_consistency: true
+    generate_statistics: true
+  
+  # 转换设置
+  conversion:
+    preserve_original: true
+    create_backup: true
+  
+  # 分析设置
+  analysis:
+    generate_class_distribution: true
+    generate_size_statistics: true
+    create_visualization: false
+
+# 标签处理配置
+label_processing:
+  # 坐标格式
+  coordinate_format: "normalized"  # normalized, absolute
+  
+  # 过滤设置
+  filtering:
+    min_bbox_area: 0.0001  # 最小边界框面积（归一化）
+    max_bbox_area: 1.0     # 最大边界框面积（归一化）
+    filter_invalid_coords: true
+  
+  # 转换设置
+  conversion:
+    flip_horizontal: false
+    flip_vertical: false
+    normalize_coordinates: true
+
+# UI配置
+ui:
+  # 交互式界面设置
+  interactive:
+    clear_screen: true
+    show_progress: true
+    confirm_operations: true
+    max_menu_items: 20
+  
+  # CLI设置
+  cli:
+    show_progress: true
+    verbose_output: false
+    color_output: true
+
+# 性能配置
+performance:
+  # 内存管理
+  max_memory_usage: "1GB"  # 最大内存使用量
+  gc_threshold: 1000       # 垃圾回收阈值
+  
+  # 并发设置
+  max_concurrent_files: 10
+  thread_pool_size: 4
+  
+  # 缓存设置
+  enable_caching: true
+  cache_size: 100
+  cache_ttl: 3600  # 缓存生存时间（秒）
+
+# 安全配置
+security:
+  # 文件操作限制
+  allowed_extensions:
+    - ".jpg"
+    - ".jpeg"
+    - ".png"
+    - ".bmp"
+    - ".tiff"
+    - ".webp"
+    - ".txt"
+    - ".xml"
+    - ".json"
+    - ".yaml"
+    - ".yml"
+  
+  # 路径限制
+  restrict_to_project_dir: false
+  max_path_length: 260
+  
+  # 操作限制
+  max_file_size: "100MB"
+  max_files_per_operation: 10000
+
+# 输出配置
+output:
+  # 目录结构
+  create_subdirectories: true
+  preserve_directory_structure: true
+  
+  # 文件命名
+  add_timestamp: false
+  add_suffix: false
+  default_suffix: "_processed"
+  
+  # 报告生成
+  generate_reports: true
+  report_format: "txt"  # txt, json, html
+  include_statistics: true
+
+# 错误处理配置
+error_handling:
+  # 错误策略
+  on_error: "continue"  # stop, continue, skip
+  max_errors: 100
+  
+  # 重试设置
+  retry_attempts: 3
+  retry_delay: 1.0  # 秒
+  
+  # 错误报告
+  save_error_log: true
+  error_log_file: "errors.log"
+
+# 插件配置（预留）
+plugins:
+  enabled: []
+  search_paths: []
+  auto_load: false
+
+# 实验性功能（预留）
+experimental:
+  enable_gpu_acceleration: false
+  use_multiprocessing: false
+  advanced_image_processing: false
