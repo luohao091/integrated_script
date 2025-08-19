@@ -170,7 +170,9 @@ class VersionManager:
 
             # 提交更改
             commit_message = f"chore: bump version to {version}"
-            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            subprocess.run(
+                ["git", "commit", "-m", commit_message, "--no-verify"], check=True
+            )
 
             print(f"✅ 已提交版本更改: {commit_message}")
             return True
