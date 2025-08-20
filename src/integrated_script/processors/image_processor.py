@@ -8,9 +8,20 @@ image_processor.py
 提供图像格式转换、尺寸调整、质量优化等功能。
 """
 
+import math
+import multiprocessing
 import os
+import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+try:
+    from tqdm import tqdm
+
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
 
 try:
     import cv2
@@ -885,54 +896,48 @@ class ImageProcessor(BaseProcessor):
                         "error": str(e),
                     }
 
-            # 批量处理 - 添加内存管理和总体进度
+            # 并发批量处理 - 使用线程池提升性能
             import gc
 
             from ..core.progress import progress_context
 
             compression_results = []
 
-            # 分批处理以减少内存压力
-            batch_size = 50  # 每批处理50张图片
-            total_batches = (len(image_files) + batch_size - 1) // batch_size
+            self.logger.info(f"使用顺序处理模式处理 {len(image_files)} 个图像文件")
 
             # 显示总体进度
             with progress_context(
                 len(image_files), "图像压缩总进度", True, leave=True, position=0
             ) as overall_progress:
-                for i in range(0, len(image_files), batch_size):
-                    batch_files = image_files[i : i + batch_size]
-                    current_batch = i // batch_size + 1
 
-                    # 处理当前批次（不显示批次进度条，避免重复）
-                    batch_results = []
-                    for img_file in batch_files:
-                        try:
-                            single_result = compress_single_image(img_file)
-                            batch_results.append(single_result)
-                        except Exception as e:
-                            self.logger.error(f"处理文件 {img_file} 时出错: {str(e)}")
-                            batch_results.append(
-                                {
-                                    "success": False,
-                                    "input_file": str(img_file),
-                                    "error": str(e),
-                                }
-                            )
+                # 顺序处理
+                for img_file in image_files:
+                    try:
+                        single_result = compress_single_image(img_file)
+                        compression_results.append(single_result)
+                    except Exception as e:
+                        self.logger.error(f"处理文件 {img_file} 时出错: {str(e)}")
+                        compression_results.append(
+                            {
+                                "success": False,
+                                "input_file": str(img_file),
+                                "error": str(e),
+                            }
+                        )
 
-                        # 更新总体进度
-                        overall_progress.update_progress(1)
+                    # 更新总体进度
+                    overall_progress.update_progress(1)
 
-                    compression_results.extend(batch_results)
+                    # 每处理完10个文件进行一次垃圾回收
+                    if len(compression_results) % 10 == 0:
+                        gc.collect()
 
-                    # 每批处理完后强制垃圾回收
-                    gc.collect()
+                self.logger.info(
+                    f"顺序处理完成，共处理 {len(compression_results)} 个文件"
+                )
 
-                    # 显示批次完成信息（确保在新行显示）
-                    print()  # 强制换行，避免与进度条重叠
-                    self.logger.info(
-                        f"批次 {current_batch}/{total_batches} 完成，已处理 {len(compression_results)} 个文件"
-                    )
+                # 最终垃圾回收
+                gc.collect()
 
             # 统计结果
             for comp_result in compression_results:
@@ -1014,6 +1019,321 @@ class ImageProcessor(BaseProcessor):
                     "space_saved": 0,
                 },
             }
+
+    def compress_images_multiprocess_batch(
+        self,
+        input_dir: str,
+        output_dir: str = None,
+        quality: int = 85,
+        target_format: str = None,
+        recursive: bool = False,
+        max_size: Tuple[int, int] = None,
+        batch_count: int = 100,
+        max_processes: int = None,
+    ) -> Dict[str, Any]:
+        """使用多进程分批处理压缩图像
+
+        Args:
+            input_dir: 输入路径（文件或目录）
+            output_dir: 输出目录（可选，默认为输入目录下的compressed子目录）
+            quality: 压缩质量 (1-100，默认85)
+            target_format: 目标格式（可选，默认保持原格式）
+            recursive: 是否递归处理
+            max_size: 最大尺寸限制 (width, height)，超过此尺寸的图像会被缩小
+            batch_count: 批次数量（默认100）
+            max_processes: 最大进程数（默认为CPU核心数）
+
+        Returns:
+            Dict[str, Any]: 压缩结果
+        """
+        # 参数验证
+        input_path = validate_path(input_dir, must_exist=True)
+
+        # 处理单个文件的情况
+        if input_path.is_file():
+            return self.compress_images(
+                input_dir, output_dir, quality, target_format, recursive, max_size
+            )
+
+        # 设置输出目录
+        if output_dir is None:
+            output_path = input_path / "compressed"
+        else:
+            output_path = validate_path(output_dir, must_exist=False)
+
+        create_directory(output_path)
+
+        self.logger.info(f"开始多进程分批压缩图像: {input_path} -> {output_path}")
+        self.logger.info(f"压缩质量: {quality}")
+        self.logger.info(f"批次数量: {batch_count}")
+        if max_size:
+            self.logger.info(f"最大尺寸限制: {max_size}")
+
+        # 获取图像文件列表
+        image_files = get_file_list(input_path, self.supported_formats, recursive)
+
+        if not image_files:
+            self.logger.warning("未找到任何图像文件")
+            return {
+                "success": True,
+                "input_dir": str(input_path),
+                "output_dir": str(output_path),
+                "quality": quality,
+                "target_format": target_format,
+                "max_size": max_size,
+                "compressed_files": [],
+                "failed_files": [],
+                "statistics": {
+                    "total_files": 0,
+                    "compressed_count": 0,
+                    "failed_count": 0,
+                    "total_input_size": 0,
+                    "total_output_size": 0,
+                    "space_saved": 0,
+                },
+            }
+
+        # 计算批次大小
+        total_files = len(image_files)
+        batch_size = max(1, math.ceil(total_files / batch_count))
+        actual_batch_count = math.ceil(total_files / batch_size)
+
+        self.logger.info(f"总文件数: {total_files}")
+        self.logger.info(f"批次大小: {batch_size}")
+        self.logger.info(f"实际批次数: {actual_batch_count}")
+
+        # 设置进程数
+        if max_processes is None:
+            max_processes = min(multiprocessing.cpu_count(), actual_batch_count)
+        else:
+            max_processes = min(max_processes, actual_batch_count)
+
+        self.logger.info(f"使用 {max_processes} 个进程处理 {actual_batch_count} 个批次")
+        self.logger.info("=" * 60)
+        self.logger.info("开始多进程图像压缩处理，请稍候...")
+        self.logger.info("注意：处理过程中可能看起来程序无响应，这是正常现象")
+        self.logger.info("=" * 60)
+
+        # 分批处理
+        batches = []
+        for i in range(0, total_files, batch_size):
+            batch = image_files[i : i + batch_size]
+            batches.append(batch)
+
+        # 初始化结果
+        result = {
+            "success": True,
+            "input_dir": str(input_path),
+            "output_dir": str(output_path),
+            "quality": quality,
+            "target_format": target_format,
+            "max_size": max_size,
+            "compressed_files": [],
+            "failed_files": [],
+            "statistics": {
+                "total_files": total_files,
+                "compressed_count": 0,
+                "failed_count": 0,
+                "total_input_size": 0,
+                "total_output_size": 0,
+                "space_saved": 0,
+            },
+        }
+
+        # 使用进程池处理批次
+        self.logger.info("正在压缩图像...")
+
+        # 初始化进度跟踪变量
+        completed_batches = 0
+        processed_files = 0
+
+        # 创建进度队列用于子进程通信
+        import multiprocessing as mp
+
+        manager = mp.Manager()
+        progress_queue = manager.Queue()
+
+        # 创建进度条
+        if TQDM_AVAILABLE:
+            progress_bar = tqdm(
+                total=total_files,
+                desc="压缩图像",
+                unit="文件",
+                ncols=80,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+            )
+        else:
+            progress_bar = None
+            self.logger.info(f"开始处理 {total_files} 个文件...")
+
+        with ProcessPoolExecutor(max_workers=max_processes) as executor:
+            # 提交所有批次任务
+            future_to_batch = {
+                executor.submit(
+                    _process_batch_worker,
+                    batch,
+                    str(input_path),
+                    str(output_path),
+                    quality,
+                    target_format,
+                    max_size,
+                    recursive,
+                    progress_queue,
+                ): i
+                for i, batch in enumerate(batches)
+            }
+
+            if not TQDM_AVAILABLE:
+                self.logger.info(f"已提交 {len(future_to_batch)} 个批次任务到进程池")
+
+            # 启动进度监听线程
+            import queue
+            import threading
+
+            progress_thread_running = True
+
+            def progress_listener():
+                nonlocal processed_files, progress_thread_running
+                while progress_thread_running:
+                    try:
+                        # 从队列中获取进度更新（非阻塞）
+                        progress_update = progress_queue.get(timeout=0.1)
+                        processed_files += progress_update
+
+                        # 更新进度条
+                        if progress_bar:
+                            progress_bar.update(progress_update)
+
+                    except:
+                        # 队列为空或超时，继续循环
+                        continue
+
+            # 启动进度监听线程
+            progress_thread = threading.Thread(target=progress_listener, daemon=True)
+            progress_thread.start()
+
+            # 处理完成的批次
+            for future in as_completed(future_to_batch):
+                batch_index = future_to_batch[future]
+                try:
+                    batch_result = future.result()
+
+                    # 合并批次结果
+                    result["compressed_files"].extend(batch_result["compressed_files"])
+                    result["failed_files"].extend(batch_result["failed_files"])
+
+                    # 更新统计信息
+                    stats = result["statistics"]
+                    batch_stats = batch_result["statistics"]
+                    stats["compressed_count"] += batch_stats["compressed_count"]
+                    stats["failed_count"] += batch_stats["failed_count"]
+                    stats["total_input_size"] += batch_stats["total_input_size"]
+                    stats["total_output_size"] += batch_stats["total_output_size"]
+                    stats["space_saved"] += batch_stats["space_saved"]
+
+                    # 更新批次计数
+                    completed_batches += 1
+
+                    # 更新进度条描述，显示成功/失败统计
+                    if progress_bar:
+                        success_count = stats["compressed_count"]
+                        failed_count = stats["failed_count"]
+                        progress_bar.set_postfix(
+                            {
+                                "成功": success_count,
+                                "失败": failed_count,
+                                "批次": f"{completed_batches}/{actual_batch_count}",
+                            }
+                        )
+                    else:
+                        # 如果没有 tqdm，显示简化的进度信息
+                        progress_percent = (processed_files / total_files) * 100
+                        self.logger.info(
+                            f"进度: {processed_files}/{total_files} ({progress_percent:.1f}%) - "
+                            f"成功: {stats['compressed_count']}, 失败: {stats['failed_count']}"
+                        )
+
+                except Exception as e:
+                    self.logger.error(f"批次 {batch_index + 1} 处理失败: {str(e)}")
+                    # 将批次中的所有文件标记为失败
+                    batch = batches[batch_index]
+                    batch_size_actual = len(batch)
+                    for img_file in batch:
+                        result["failed_files"].append(
+                            {
+                                "success": False,
+                                "input_file": str(img_file),
+                                "error": f"批次处理失败: {str(e)}",
+                            }
+                        )
+
+                    # 更新批次计数和失败统计
+                    completed_batches += 1
+                    result["statistics"]["failed_count"] += batch_size_actual
+
+                    # 手动更新进度条（因为失败的批次不会通过队列报告进度）
+                    if progress_bar:
+                        progress_bar.update(batch_size_actual)
+                        progress_bar.set_postfix(
+                            {
+                                "成功": result["statistics"]["compressed_count"],
+                                "失败": result["statistics"]["failed_count"],
+                                "批次": f"{completed_batches}/{actual_batch_count}",
+                            }
+                        )
+
+        # 停止进度监听线程
+        progress_thread_running = False
+        if "progress_thread" in locals():
+            progress_thread.join(timeout=1.0)  # 等待线程结束，最多1秒
+
+        # 处理队列中剩余的进度更新
+        try:
+            while not progress_queue.empty():
+                progress_update = progress_queue.get_nowait()
+                if progress_bar:
+                    progress_bar.update(progress_update)
+        except:
+            pass
+
+        # 关闭进度条
+        if progress_bar:
+            progress_bar.close()
+
+        # 添加格式化的大小信息
+        stats = result["statistics"]
+        stats["total_input_size_formatted"] = format_file_size(
+            stats["total_input_size"]
+        )
+        stats["total_output_size_formatted"] = format_file_size(
+            stats["total_output_size"]
+        )
+        stats["space_saved_formatted"] = format_file_size(stats["space_saved"])
+
+        if stats["total_input_size"] > 0:
+            stats["overall_compression_ratio"] = (
+                stats["total_output_size"] / stats["total_input_size"]
+            )
+            stats["overall_space_saved_percentage"] = (
+                stats["space_saved"] / stats["total_input_size"]
+            ) * 100
+        else:
+            stats["overall_compression_ratio"] = 1.0
+            stats["overall_space_saved_percentage"] = 0.0
+
+        # 显示最终完成信息
+        self.logger.info("=" * 60)
+        self.logger.info("图像压缩处理完成！")
+        self.logger.info(f"总文件数: {stats['total_files']}")
+        self.logger.info(f"成功压缩: {stats['compressed_count']} 个文件")
+        self.logger.info(f"处理失败: {stats['failed_count']} 个文件")
+        self.logger.info(
+            f"空间节省: {stats['space_saved_formatted']} ({stats['overall_space_saved_percentage']:.1f}%)"
+        )
+        self.logger.info(f"输出目录: {output_path}")
+        self.logger.info("=" * 60)
+
+        return result
 
     def _compress_single_image(
         self,
@@ -1318,3 +1638,747 @@ class ImageProcessor(BaseProcessor):
 
         except Exception as e:
             raise ProcessingError(f"获取图像信息失败: {str(e)}")
+
+
+def _compress_with_pil_worker(
+    input_file: Path,
+    output_file: Path,
+    quality: int,
+    target_format: str,
+    max_size: Tuple[int, int] = None,
+) -> None:
+    """使用PIL压缩图像"""
+    import gc
+
+    from PIL import Image
+
+    original_img = None
+    processed_img = None
+
+    try:
+        # 打开图像
+        original_img = Image.open(input_file)
+
+        # 转换为RGB模式（如果需要）
+        if target_format.lower() in ["jpg", "jpeg"] and original_img.mode in [
+            "RGBA",
+            "LA",
+        ]:
+            # 创建白色背景
+            background = Image.new("RGB", original_img.size, (255, 255, 255))
+            if original_img.mode == "RGBA":
+                background.paste(original_img, mask=original_img.split()[-1])
+            else:
+                background.paste(original_img, mask=original_img.split()[-1])
+            processed_img = background
+        else:
+            processed_img = original_img.copy()
+
+        # 调整尺寸（如果需要）
+        if max_size:
+            processed_img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        # 保存图像
+        save_kwargs = {}
+        if target_format.lower() in ["jpg", "jpeg"]:
+            save_kwargs["quality"] = quality
+            save_kwargs["optimize"] = True
+        elif target_format.lower() == "png":
+            save_kwargs["optimize"] = True
+        elif target_format.lower() == "webp":
+            save_kwargs["quality"] = quality
+            save_kwargs["method"] = 6
+
+        # 映射格式名称以符合PIL的要求
+        pil_format = target_format.upper()
+        if pil_format == "JPG":
+            pil_format = "JPEG"
+
+        processed_img.save(output_file, format=pil_format, **save_kwargs)
+
+    finally:
+        # 清理内存
+        if original_img:
+            original_img.close()
+        if processed_img and processed_img != original_img:
+            processed_img.close()
+        gc.collect()
+
+
+def _compress_with_cv2_worker(
+    input_file: Path,
+    output_file: Path,
+    quality: int,
+    target_format: str,
+    max_size: Tuple[int, int] = None,
+) -> None:
+    """使用OpenCV压缩图像"""
+    import gc
+
+    import cv2
+
+    img = None
+    try:
+        # 读取图像
+        img = cv2.imread(str(input_file))
+        if img is None:
+            raise Exception(f"无法读取图像文件: {input_file}")
+
+        # 调整尺寸（如果需要）
+        if max_size:
+            height, width = img.shape[:2]
+            max_width, max_height = max_size
+
+            # 计算缩放比例
+            scale = min(max_width / width, max_height / height)
+            if scale < 1:
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+                img = cv2.resize(
+                    img, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4
+                )
+
+        # 设置压缩参数
+        if target_format.lower() in ["jpg", "jpeg"]:
+            encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+        elif target_format.lower() == "png":
+            # PNG压缩级别 (0-9)
+            compression_level = int((100 - quality) / 100 * 9)
+            encode_params = [cv2.IMWRITE_PNG_COMPRESSION, compression_level]
+        elif target_format.lower() == "webp":
+            encode_params = [cv2.IMWRITE_WEBP_QUALITY, quality]
+        else:
+            encode_params = []
+
+        # 保存图像
+        success = cv2.imwrite(str(output_file), img, encode_params)
+        if not success:
+            raise Exception(f"保存图像失败: {output_file}")
+
+    finally:
+        # 清理内存
+        if img is not None:
+            del img
+        gc.collect()
+
+
+def _compress_single_image_worker(
+    input_file: Path,
+    output_file: Path,
+    quality: int,
+    target_format: str,
+    max_size: Tuple[int, int] = None,
+) -> None:
+    """压缩单个图像的核心逻辑"""
+    import gc
+
+    try:
+        if PIL_AVAILABLE:
+            _compress_with_pil_worker(
+                input_file, output_file, quality, target_format, max_size
+            )
+        elif CV2_AVAILABLE:
+            _compress_with_cv2_worker(
+                input_file, output_file, quality, target_format, max_size
+            )
+        else:
+            raise Exception("没有可用的图像处理库")
+    finally:
+        # 确保每张图片处理完后进行内存清理
+        gc.collect()
+
+
+def _process_batch_worker(
+    batch_files: List[Path],
+    input_dir: str,
+    output_dir: str,
+    quality: int,
+    target_format: str,
+    max_size: Tuple[int, int],
+    recursive: bool,
+    progress_queue=None,
+) -> Dict[str, Any]:
+    """批次处理工作函数，在独立进程中运行
+
+    Args:
+        batch_files: 当前批次要处理的文件列表
+        input_dir: 输入目录
+        output_dir: 输出目录
+        quality: 压缩质量
+        target_format: 目标格式
+        max_size: 最大尺寸限制
+        recursive: 是否递归处理
+
+    Returns:
+        Dict[str, Any]: 批次处理结果
+    """
+    import gc
+    from pathlib import Path
+
+    # 重新导入必要的模块（因为在新进程中）
+    try:
+        from PIL import Image, ImageOps
+
+        PIL_AVAILABLE = True
+    except ImportError:
+        PIL_AVAILABLE = False
+
+    try:
+        import cv2
+
+        CV2_AVAILABLE = True
+    except ImportError:
+        CV2_AVAILABLE = False
+
+    # 在多进程环境中使用绝对导入
+    try:
+        from integrated_script.core.utils import create_directory, get_unique_filename
+    except ImportError:
+        # 如果绝对导入失败，尝试相对导入
+        from ..core.utils import create_directory, get_unique_filename
+
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+
+    # 初始化批次结果
+    batch_result = {
+        "compressed_files": [],
+        "failed_files": [],
+        "statistics": {
+            "compressed_count": 0,
+            "failed_count": 0,
+            "total_input_size": 0,
+            "total_output_size": 0,
+            "space_saved": 0,
+        },
+    }
+
+    # 处理批次中的所有文件的内部函数
+    def compress_single_image_worker(img_file: Path) -> Dict[str, Any]:
+        """压缩单个图像的工作函数"""
+        try:
+            # 计算输入文件大小
+            input_size = img_file.stat().st_size
+
+            # 确定输出格式
+            output_format = target_format or img_file.suffix.lstrip(".").lower()
+            if output_format not in ["jpg", "jpeg", "png", "webp"]:
+                output_format = "jpg"  # 默认转为jpg以获得更好的压缩
+
+            # 生成输出文件路径
+            if recursive:
+                # 保持目录结构
+                rel_path = img_file.relative_to(input_path)
+                output_file = output_path / rel_path.with_suffix(f".{output_format}")
+                create_directory(output_file.parent)
+            else:
+                output_file = output_path / f"{img_file.stem}.{output_format}"
+
+            # 确保文件名唯一
+            output_file = get_unique_filename(output_file.parent, output_file.name)
+
+            # 压缩图像 - 直接在这里实现压缩逻辑
+            try:
+                if PIL_AVAILABLE:
+                    # 使用PIL压缩
+                    original_img = None
+                    processed_img = None
+
+                    try:
+                        # 打开图像
+                        original_img = Image.open(img_file)
+
+                        # 转换为RGB模式（如果需要）
+                        if output_format.lower() in [
+                            "jpg",
+                            "jpeg",
+                        ] and original_img.mode in ["RGBA", "LA"]:
+                            # 创建白色背景
+                            background = Image.new(
+                                "RGB", original_img.size, (255, 255, 255)
+                            )
+                            if original_img.mode == "RGBA":
+                                background.paste(
+                                    original_img, mask=original_img.split()[-1]
+                                )
+                            else:
+                                background.paste(original_img)
+                            processed_img = background
+                        else:
+                            processed_img = original_img.copy()
+
+                        # 调整尺寸（如果需要）
+                        if max_size:
+                            processed_img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+                        # 保存图像
+                        save_kwargs = {}
+                        if output_format.lower() in ["jpg", "jpeg"]:
+                            save_kwargs["quality"] = quality
+                            save_kwargs["optimize"] = True
+                        elif output_format.lower() == "png":
+                            save_kwargs["optimize"] = True
+                        elif output_format.lower() == "webp":
+                            save_kwargs["quality"] = quality
+                            save_kwargs["method"] = 6
+
+                        # 映射格式名称以符合PIL的要求
+                        pil_format = output_format.upper()
+                        if pil_format == "JPG":
+                            pil_format = "JPEG"
+
+                        processed_img.save(
+                            output_file, format=pil_format, **save_kwargs
+                        )
+
+                    finally:
+                        # 清理内存
+                        if original_img:
+                            original_img.close()
+                        if processed_img and processed_img != original_img:
+                            processed_img.close()
+                        gc.collect()
+
+                elif CV2_AVAILABLE:
+                    # 使用OpenCV压缩
+                    img = None
+
+                    try:
+                        # 读取图像
+                        img = cv2.imread(str(img_file), cv2.IMREAD_COLOR)
+                        if img is None:
+                            raise Exception(f"无法读取图像: {img_file}")
+
+                        # 调整尺寸（如果需要）
+                        if max_size:
+                            height, width = img.shape[:2]
+                            max_width, max_height = max_size
+
+                            # 计算缩放比例
+                            scale = min(max_width / width, max_height / height)
+                            if scale < 1:
+                                new_width = int(width * scale)
+                                new_height = int(height * scale)
+                                img = cv2.resize(
+                                    img,
+                                    (new_width, new_height),
+                                    interpolation=cv2.INTER_LANCZOS4,
+                                )
+
+                        # 设置压缩参数
+                        if output_format.lower() in ["jpg", "jpeg"]:
+                            encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+                        elif output_format.lower() == "png":
+                            # PNG压缩级别 (0-9)
+                            compression_level = int((100 - quality) / 100 * 9)
+                            encode_params = [
+                                cv2.IMWRITE_PNG_COMPRESSION,
+                                compression_level,
+                            ]
+                        elif output_format.lower() == "webp":
+                            encode_params = [cv2.IMWRITE_WEBP_QUALITY, quality]
+                        else:
+                            encode_params = []
+
+                        # 保存图像
+                        success = cv2.imwrite(str(output_file), img, encode_params)
+                        if not success:
+                            raise Exception(f"保存图像失败: {output_file}")
+
+                    finally:
+                        # 清理内存
+                        if img is not None:
+                            del img
+                        gc.collect()
+
+                else:
+                    raise Exception("没有可用的图像处理库")
+
+            finally:
+                # 确保每张图片处理完后进行内存清理
+                gc.collect()
+
+            # 计算输出文件大小
+            output_size = output_file.stat().st_size
+            space_saved = input_size - output_size
+
+            return {
+                "success": True,
+                "input_file": str(img_file),
+                "output_file": str(output_file),
+                "input_size": input_size,
+                "output_size": output_size,
+                "space_saved": space_saved,
+                "compression_ratio": (
+                    output_size / input_size if input_size > 0 else 1.0
+                ),
+                "space_saved_percentage": (
+                    (space_saved / input_size * 100) if input_size > 0 else 0
+                ),
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "input_file": str(img_file),
+                "error": str(e),
+            }
+
+    def _compress_with_pil_worker(
+        input_file: Path,
+        output_file: Path,
+        quality: int,
+        target_format: str,
+        max_size: Tuple[int, int] = None,
+    ) -> None:
+        """使用PIL压缩图像"""
+        original_img = None
+        processed_img = None
+
+        try:
+            # 打开图像
+            original_img = Image.open(input_file)
+
+            # 转换为RGB模式（如果需要）
+            if target_format.lower() in ["jpg", "jpeg"] and original_img.mode in [
+                "RGBA",
+                "LA",
+            ]:
+                # 创建白色背景
+                background = Image.new("RGB", original_img.size, (255, 255, 255))
+                if original_img.mode == "RGBA":
+                    background.paste(original_img, mask=original_img.split()[-1])
+                else:
+                    background.paste(original_img, mask=original_img.split()[-1])
+                processed_img = background
+            else:
+                processed_img = original_img.copy()
+
+            # 调整尺寸（如果需要）
+            if max_size:
+                processed_img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+            # 保存图像
+            save_kwargs = {}
+            if target_format.lower() in ["jpg", "jpeg"]:
+                save_kwargs["quality"] = quality
+                save_kwargs["optimize"] = True
+            elif target_format.lower() == "png":
+                save_kwargs["optimize"] = True
+            elif target_format.lower() == "webp":
+                save_kwargs["quality"] = quality
+                save_kwargs["method"] = 6
+
+            # 映射格式名称以符合PIL的要求
+            pil_format = target_format.upper()
+            if pil_format == "JPG":
+                pil_format = "JPEG"
+
+            processed_img.save(output_file, format=pil_format, **save_kwargs)
+
+        finally:
+            # 清理内存
+            if original_img:
+                original_img.close()
+            if processed_img and processed_img != original_img:
+                processed_img.close()
+            gc.collect()
+
+    def _compress_with_cv2_worker(
+        input_file: Path,
+        output_file: Path,
+        quality: int,
+        target_format: str,
+        max_size: Tuple[int, int] = None,
+    ) -> None:
+        """使用OpenCV压缩图像"""
+        img = None
+        try:
+            # 读取图像
+            img = cv2.imread(str(input_file))
+            if img is None:
+                raise Exception(f"无法读取图像文件: {input_file}")
+
+            # 调整尺寸（如果需要）
+            if max_size:
+                height, width = img.shape[:2]
+                max_width, max_height = max_size
+
+                # 计算缩放比例
+                scale = min(max_width / width, max_height / height)
+                if scale < 1:
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                    img = cv2.resize(
+                        img, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4
+                    )
+
+            # 设置压缩参数
+            if target_format.lower() in ["jpg", "jpeg"]:
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+            elif target_format.lower() == "png":
+                # PNG压缩级别 (0-9)
+                compression_level = int((100 - quality) / 100 * 9)
+                encode_params = [cv2.IMWRITE_PNG_COMPRESSION, compression_level]
+            elif target_format.lower() == "webp":
+                encode_params = [cv2.IMWRITE_WEBP_QUALITY, quality]
+            else:
+                encode_params = []
+
+            # 保存图像
+            success = cv2.imwrite(str(output_file), img, encode_params)
+            if not success:
+                raise Exception(f"保存图像失败: {output_file}")
+
+        finally:
+            # 清理内存
+            if img is not None:
+                del img
+            gc.collect()
+
+    def _compress_single_image_worker(
+        input_file: Path,
+        output_file: Path,
+        quality: int,
+        target_format: str,
+        max_size: Tuple[int, int] = None,
+    ) -> None:
+        """压缩单个图像的核心逻辑"""
+        try:
+            if PIL_AVAILABLE:
+                _compress_with_pil_worker(
+                    input_file, output_file, quality, target_format, max_size
+                )
+            elif CV2_AVAILABLE:
+                _compress_with_cv2_worker(
+                    input_file, output_file, quality, target_format, max_size
+                )
+            else:
+                raise Exception("没有可用的图像处理库")
+        finally:
+            # 确保每张图片处理完后进行内存清理
+            gc.collect()
+
+    def compress_single_image_worker(img_file: Path) -> Dict[str, Any]:
+        """压缩单个图像的工作函数"""
+        try:
+            # 计算输入文件大小
+            input_size = img_file.stat().st_size
+
+            # 确定输出格式
+            output_format = target_format or img_file.suffix.lstrip(".").lower()
+            if output_format not in ["jpg", "jpeg", "png", "webp"]:
+                output_format = "jpg"  # 默认转为jpg以获得更好的压缩
+
+            # 生成输出文件路径
+            if recursive:
+                # 保持目录结构
+                rel_path = img_file.relative_to(input_path)
+                output_file = output_path / rel_path.with_suffix(f".{output_format}")
+                create_directory(output_file.parent)
+            else:
+                output_file = output_path / f"{img_file.stem}.{output_format}"
+
+            # 确保文件名唯一
+            output_file = get_unique_filename(output_file.parent, output_file.name)
+
+            # 压缩图像 - 直接在这里实现压缩逻辑
+            try:
+                if PIL_AVAILABLE:
+                    # 使用PIL压缩
+                    original_img = None
+                    processed_img = None
+
+                    try:
+                        # 打开图像
+                        original_img = Image.open(img_file)
+
+                        # 转换为RGB模式（如果需要）
+                        if output_format.lower() in [
+                            "jpg",
+                            "jpeg",
+                        ] and original_img.mode in ["RGBA", "LA"]:
+                            # 创建白色背景
+                            background = Image.new(
+                                "RGB", original_img.size, (255, 255, 255)
+                            )
+                            if original_img.mode == "RGBA":
+                                background.paste(
+                                    original_img, mask=original_img.split()[-1]
+                                )
+                            else:
+                                background.paste(original_img)
+                            processed_img = background
+                        else:
+                            processed_img = original_img.copy()
+
+                        # 调整尺寸（如果需要）
+                        if max_size:
+                            processed_img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+                        # 保存图像
+                        save_kwargs = {}
+                        if output_format.lower() in ["jpg", "jpeg"]:
+                            save_kwargs["quality"] = quality
+                            save_kwargs["optimize"] = True
+                        elif output_format.lower() == "png":
+                            save_kwargs["optimize"] = True
+                        elif output_format.lower() == "webp":
+                            save_kwargs["quality"] = quality
+                            save_kwargs["method"] = 6
+
+                        # 映射格式名称以符合PIL的要求
+                        pil_format = output_format.upper()
+                        if pil_format == "JPG":
+                            pil_format = "JPEG"
+
+                        processed_img.save(
+                            output_file, format=pil_format, **save_kwargs
+                        )
+
+                    finally:
+                        # 清理内存
+                        if original_img:
+                            original_img.close()
+                        if processed_img and processed_img != original_img:
+                            processed_img.close()
+                        gc.collect()
+
+                elif CV2_AVAILABLE:
+                    # 使用OpenCV压缩
+                    img = None
+
+                    try:
+                        # 读取图像
+                        img = cv2.imread(str(img_file), cv2.IMREAD_COLOR)
+                        if img is None:
+                            raise Exception(f"无法读取图像: {img_file}")
+
+                        # 调整尺寸（如果需要）
+                        if max_size:
+                            height, width = img.shape[:2]
+                            max_width, max_height = max_size
+
+                            # 计算缩放比例
+                            scale = min(max_width / width, max_height / height)
+                            if scale < 1:
+                                new_width = int(width * scale)
+                                new_height = int(height * scale)
+                                img = cv2.resize(
+                                    img,
+                                    (new_width, new_height),
+                                    interpolation=cv2.INTER_LANCZOS4,
+                                )
+
+                        # 设置压缩参数
+                        if output_format.lower() in ["jpg", "jpeg"]:
+                            encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+                        elif output_format.lower() == "png":
+                            # PNG压缩级别 (0-9)
+                            compression_level = int((100 - quality) / 100 * 9)
+                            encode_params = [
+                                cv2.IMWRITE_PNG_COMPRESSION,
+                                compression_level,
+                            ]
+                        elif output_format.lower() == "webp":
+                            encode_params = [cv2.IMWRITE_WEBP_QUALITY, quality]
+                        else:
+                            encode_params = []
+
+                        # 保存图像
+                        success = cv2.imwrite(str(output_file), img, encode_params)
+                        if not success:
+                            raise Exception(f"保存图像失败: {output_file}")
+
+                    finally:
+                        # 清理内存
+                        if img is not None:
+                            del img
+                        gc.collect()
+
+                else:
+                    raise Exception("没有可用的图像处理库")
+
+            finally:
+                # 确保每张图片处理完后进行内存清理
+                gc.collect()
+
+            # 计算输出文件大小
+            output_size = output_file.stat().st_size
+            space_saved = input_size - output_size
+
+            return {
+                "success": True,
+                "input_file": str(img_file),
+                "output_file": str(output_file),
+                "input_size": input_size,
+                "output_size": output_size,
+                "space_saved": space_saved,
+                "compression_ratio": (
+                    output_size / input_size if input_size > 0 else 1.0
+                ),
+                "space_saved_percentage": (
+                    (space_saved / input_size * 100) if input_size > 0 else 0
+                ),
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "input_file": str(img_file),
+                "error": str(e),
+            }
+
+    # 处理批次中的所有文件
+    processed_count = 0
+    total_files_in_batch = len(batch_files)
+
+    for img_file in batch_files:
+        try:
+            single_result = compress_single_image_worker(img_file)
+            processed_count += 1
+
+            if single_result["success"]:
+                batch_result["compressed_files"].append(single_result)
+                batch_result["statistics"]["compressed_count"] += 1
+                batch_result["statistics"]["total_input_size"] += single_result[
+                    "input_size"
+                ]
+                batch_result["statistics"]["total_output_size"] += single_result[
+                    "output_size"
+                ]
+                batch_result["statistics"]["space_saved"] += single_result[
+                    "space_saved"
+                ]
+            else:
+                batch_result["failed_files"].append(single_result)
+                batch_result["statistics"]["failed_count"] += 1
+
+        except Exception as e:
+            # 处理意外错误
+            processed_count += 1
+            error_msg = str(e)
+            batch_result["failed_files"].append(
+                {
+                    "success": False,
+                    "input_file": str(img_file),
+                    "error": error_msg,
+                }
+            )
+            batch_result["statistics"]["failed_count"] += 1
+
+        # 向主进程报告进度
+        if progress_queue is not None:
+            try:
+                progress_queue.put(1)  # 报告处理了1个文件
+            except:
+                pass  # 忽略队列错误
+
+        # 定期进行垃圾回收
+        if processed_count % 10 == 0:
+            gc.collect()
+
+    # 最终垃圾回收
+    gc.collect()
+
+    return batch_result

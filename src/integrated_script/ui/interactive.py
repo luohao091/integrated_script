@@ -1274,6 +1274,25 @@ class InteractiveInterface:
             if Path(input_path).is_dir():
                 recursive = self._get_yes_no_input("是否递归处理子目录?", default=True)
 
+            # 多进程分批处理设置（已移除线程处理选项）
+            import os
+
+            cpu_count = os.cpu_count() or 4
+
+            print("\n=== 多进程分批处理设置 ===")
+            print(f"检测到 {cpu_count} 个CPU核心")
+
+            batch_count = self._get_int_input(
+                "批次数量 (默认100): ", default=100, min_val=1, max_val=1000
+            )
+
+            max_processes = self._get_int_input(
+                f"最大进程数 (推荐{cpu_count}): ",
+                default=cpu_count,
+                min_val=1,
+                max_val=cpu_count * 2,  # 允许超过CPU核心数，适应不同工作负载
+            )
+
             processor = self._get_processor("image")
 
             print("\n正在转换图像格式...")
@@ -1330,6 +1349,25 @@ class InteractiveInterface:
             recursive = False
             if Path(input_path).is_dir():
                 recursive = self._get_yes_no_input("是否递归处理子目录?", default=True)
+
+            # 多进程分批处理选项
+            import os
+
+            cpu_count = os.cpu_count() or 4
+
+            print("\n=== 多进程分批处理设置 ===")
+            print(f"检测到 {cpu_count} 个CPU核心")
+
+            batch_count = self._get_int_input(
+                "批次数量 (默认100): ", default=100, min_val=1, max_val=1000
+            )
+
+            max_processes = self._get_int_input(
+                f"最大进程数 (推荐{cpu_count}): ",
+                default=cpu_count,
+                min_val=1,
+                max_val=cpu_count * 2,  # 允许超过CPU核心数，适应不同工作负载
+            )
 
             processor = self._get_processor("image")
 
@@ -1660,7 +1698,53 @@ class InteractiveInterface:
             if Path(input_path).is_dir():
                 recursive = self._get_yes_no_input("是否递归处理子目录?", default=True)
 
+            # 多进程分批处理设置
+            import os
+
+            cpu_count = os.cpu_count() or 4
+
+            # 统计图片数量
             processor = self._get_processor("image")
+            print("\n正在统计图片数量...")
+
+            if Path(input_path).is_file():
+                total_images = 1
+            else:
+                # 统计目录中的图片文件数量
+                image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+                total_images = 0
+
+                if recursive:
+                    for file_path in Path(input_path).rglob("*"):
+                        if file_path.suffix.lower() in image_extensions:
+                            total_images += 1
+                else:
+                    for file_path in Path(input_path).iterdir():
+                        if (
+                            file_path.is_file()
+                            and file_path.suffix.lower() in image_extensions
+                        ):
+                            total_images += 1
+
+            print(f"发现图片文件: {total_images} 张")
+
+            # 固定每批次1000张图片，根据总数计算批次数
+            batch_size = 1000
+            batch_count = max(
+                1, (total_images + batch_size - 1) // batch_size
+            )  # 向上取整
+
+            print(f"每批次处理: {batch_size} 张图片")
+            print(f"总批次数: {batch_count} 个批次")
+
+            # 最大进程数设置
+            default_processes = min(cpu_count, batch_count)  # 进程数不超过批次数
+            max_processes = self._get_int_input(
+                f"最大进程数 (默认{default_processes}): ",
+                default=default_processes,
+                min_val=1,
+                max_val=min(cpu_count * 2, batch_count),
+            )
 
             print("\n正在压缩图像...")
             print(f"输入路径: {input_path}")
@@ -1675,15 +1759,22 @@ class InteractiveInterface:
                 print(f"最大尺寸: {max_size[0]}x{max_size[1]}")
             if Path(input_path).is_dir():
                 print(f"递归处理: {'是' if recursive else '否'}")
+            print(f"处理模式: 多进程分批处理")
+            print(f"每批次大小: {batch_size} 张图片")
+            print(f"总批次数: {batch_count} 个批次")
+            print(f"最大进程数: {max_processes}")
             print()
 
-            result = processor.compress_images(
+            # 使用多进程分批处理
+            result = processor.compress_images_multiprocess_batch(
                 input_dir=input_path,
                 output_dir=output_path if output_path else None,
                 quality=quality,
                 target_format=target_format,
                 recursive=recursive,
                 max_size=max_size,
+                batch_count=batch_count,
+                max_processes=max_processes,
             )
 
             self._display_result(result)
@@ -2118,7 +2209,7 @@ class InteractiveInterface:
             print("\n正在分割数据集...")
             result = processor.split_dataset(
                 dataset_path,
-                output_dir=output_dir if output_dir else None,
+                output_path=output_dir if output_dir else None,
                 train_ratio=train_ratio,
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
@@ -3091,10 +3182,13 @@ image:
             if batch_size is not None:
                 self.config_manager.set("processing.batch_size", batch_size)
 
+            import os
+
+            cpu_count = os.cpu_count() or 4
             max_workers = self._get_int_input(
                 f"最大工作线程 [{processing.get('max_workers', 4)}]: ",
                 min_val=1,
-                max_val=16,
+                max_val=cpu_count,  # 最大值设置为机器的CPU核心数
             )
             if max_workers is not None:
                 self.config_manager.set("processing.max_workers", max_workers)

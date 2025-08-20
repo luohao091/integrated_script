@@ -73,23 +73,25 @@ class CLIInterface:
         parser.add_argument("--version", action="version", version="%(prog)s 1.0.0")
 
         parser.add_argument("--config", type=str, help="配置文件路径")
-
         parser.add_argument(
             "--log-level",
             choices=["DEBUG", "INFO", "WARNING", "ERROR"],
             default="INFO",
             help="日志级别 (默认: INFO)",
         )
-
         parser.add_argument("--log-file", type=str, help="日志文件路径")
-
         parser.add_argument(
-            "--quiet", action="store_true", help="静默模式，只输出错误信息"
+            "--quiet", action="store_true", help="静默模式,只输出错误信息"
+        )
+        parser.add_argument(
+            "--verbose", action="store_true", help="详细模式,输出调试信息"
         )
 
-        parser.add_argument(
-            "--verbose", action="store_true", help="详细模式，输出调试信息"
-        )
+        # 创建子命令解析器
+        subparsers = parser.add_subparsers(dest="command", help="可用命令")
+        
+        # 设置子命令
+        self.setup_parsers(subparsers)
 
         return parser
 
@@ -149,7 +151,7 @@ class CLIInterface:
         )
         ctds_parser.add_argument("dataset_path", help="CTDS数据集路径")
         ctds_parser.add_argument(
-            "--project-name", help="处理后的项目名称（为空时自动生成）"
+            "--project-name", help="处理后的项目名称(为空时自动生成)"
         )
 
     def _add_image_commands(self, subparsers):
@@ -164,7 +166,7 @@ class CLIInterface:
 
         # 格式转换
         convert_parser = image_subparsers.add_parser("convert", help="转换图像格式")
-        convert_parser.add_argument("input_path", help="输入路径（文件或目录）")
+        convert_parser.add_argument("input_path", help="输入路径(文件或目录)")
         convert_parser.add_argument("--output-path", help="输出路径")
         convert_parser.add_argument(
             "--format",
@@ -181,7 +183,7 @@ class CLIInterface:
 
         # 尺寸调整
         resize_parser = image_subparsers.add_parser("resize", help="调整图像尺寸")
-        resize_parser.add_argument("input_path", help="输入路径（文件或目录）")
+        resize_parser.add_argument("input_path", help="输入路径(文件或目录)")
         resize_parser.add_argument("--output-path", help="输出路径")
         resize_parser.add_argument(
             "--size", required=True, help="目标尺寸 (WxH 或 单个数字)"
@@ -197,7 +199,7 @@ class CLIInterface:
         compress_parser = image_subparsers.add_parser("compress", help="压缩图像")
         compress_parser.add_argument("input_dir", help="输入目录")
         compress_parser.add_argument(
-            "--output-dir", help="输出目录（默认为输入目录下的compressed子目录）"
+            "--output-dir", help="输出目录(默认为输入目录下的compressed子目录)"
         )
         compress_parser.add_argument(
             "--quality", type=int, default=85, help="压缩质量 (1-100, 默认: 85)"
@@ -205,13 +207,28 @@ class CLIInterface:
         compress_parser.add_argument(
             "--format",
             choices=["jpg", "jpeg", "png", "webp"],
-            help="目标格式（默认保持原格式）",
+            help="目标格式(默认保持原格式)",
         )
         compress_parser.add_argument(
-            "--max-size", help="最大尺寸限制 (WxH，如 1920x1080)"
+            "--max-size", help="最大尺寸限制 (WxH,如 1920x1080)"
         )
         compress_parser.add_argument(
             "--recursive", action="store_true", help="递归处理子目录"
+        )
+        compress_parser.add_argument(
+            "--no-concurrent", action="store_true", help="禁用并发处理(默认启用)"
+        )
+        compress_parser.add_argument(
+            "--max-workers", type=int, help="最大线程数(默认为CPU核心数的20%%,最大为CPU核心数)"
+        )
+        compress_parser.add_argument(
+            "--multiprocess-batch", action="store_true", help="使用多进程分批处理(适合大量文件)"
+        )
+        compress_parser.add_argument(
+            "--batch-count", type=int, default=100, help="批次数量(默认100,仅在多进程分批模式下有效)"
+        )
+        compress_parser.add_argument(
+            "--max-processes", type=int, help="最大进程数(默认为CPU核心数,仅在多进程分批模式下有效)"
         )
 
     def _add_file_commands(self, subparsers):
@@ -229,7 +246,7 @@ class CLIInterface:
             "organize", help="按扩展名组织文件"
         )
         organize_parser.add_argument("source_dir", help="源目录")
-        organize_parser.add_argument("--output-dir", help="输出目录（默认为源目录）")
+        organize_parser.add_argument("--output-dir", help="输出目录(默认为源目录)")
         organize_parser.add_argument(
             "--by-extension", action="store_true", help="按扩展名分组"
         )
@@ -331,7 +348,7 @@ class CLIInterface:
         )
         create_empty_parser.add_argument("images_dir", help="图像目录")
         create_empty_parser.add_argument(
-            "--labels-dir", help="标签目录（默认为图像目录）"
+            "--labels-dir", help="标签目录(默认为图像目录)"
         )
         create_empty_parser.add_argument(
             "--overwrite", action="store_true", help="覆盖已存在的标签文件"
@@ -352,7 +369,7 @@ class CLIInterface:
         filter_parser = label_subparsers.add_parser("filter", help="根据类别过滤标签")
         filter_parser.add_argument("labels_dir", help="标签目录")
         filter_parser.add_argument(
-            "--classes", required=True, help="目标类别（逗号分隔）"
+            "--classes", required=True, help="目标类别(逗号分隔)"
         )
         filter_parser.add_argument(
             "--action",
@@ -385,7 +402,7 @@ class CLIInterface:
         )
 
         setup_logging(
-            level=log_level, log_file=args.log_file, console_output=not args.quiet
+            log_level=log_level
         )
 
         self.logger = get_logger(self.__class__.__name__)
@@ -509,14 +526,29 @@ class CLIInterface:
                 if args.max_size:
                     max_size = self._parse_size(args.max_size)
 
-                result = processor.nm(
-                    input_dir=args.input_dir,
-                    output_dir=args.output_dir,
-                    quality=args.quality,
-                    target_format=args.format,
-                    recursive=args.recursive,
-                    max_size=max_size,
-                )
+                # 根据用户选择使用不同的处理方法
+                if args.multiprocess_batch:
+                    result = processor.compress_images_multiprocess_batch(
+                        input_dir=args.input_dir,
+                        output_dir=args.output_dir,
+                        quality=args.quality,
+                        target_format=args.format,
+                        recursive=args.recursive,
+                        max_size=max_size,
+                        batch_count=args.batch_count,
+                        max_processes=args.max_processes,
+                    )
+                else:
+                    result = processor.compress_images(
+                        input_dir=args.input_dir,
+                        output_dir=args.output_dir,
+                        quality=args.quality,
+                        target_format=args.format,
+                        recursive=args.recursive,
+                        max_size=max_size,
+                        concurrent=not args.no_concurrent,
+                        max_workers=args.max_workers,
+                    )
                 self._print_result(result)
 
                 # 显示压缩统计信息
@@ -593,7 +625,7 @@ class CLIInterface:
             if args.dataset_action == "split":
                 result = processor.split_dataset(
                     args.dataset_path,
-                    output_dir=args.output_dir,
+                    output_path=args.output_dir,
                     train_ratio=args.train_ratio,
                     val_ratio=args.val_ratio,
                     test_ratio=args.test_ratio,
