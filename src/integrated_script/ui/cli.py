@@ -73,25 +73,23 @@ class CLIInterface:
         parser.add_argument("--version", action="version", version="%(prog)s 1.0.0")
 
         parser.add_argument("--config", type=str, help="配置文件路径")
+
         parser.add_argument(
             "--log-level",
             choices=["DEBUG", "INFO", "WARNING", "ERROR"],
             default="INFO",
             help="日志级别 (默认: INFO)",
         )
+
         parser.add_argument("--log-file", type=str, help="日志文件路径")
+
         parser.add_argument(
-            "--quiet", action="store_true", help="静默模式,只输出错误信息"
-        )
-        parser.add_argument(
-            "--verbose", action="store_true", help="详细模式,输出调试信息"
+            "--quiet", action="store_true", help="静默模式，只输出错误信息"
         )
 
-        # 创建子命令解析器
-        subparsers = parser.add_subparsers(dest="command", help="可用命令")
-        
-        # 设置子命令
-        self.setup_parsers(subparsers)
+        parser.add_argument(
+            "--verbose", action="store_true", help="详细模式，输出调试信息"
+        )
 
         return parser
 
@@ -151,7 +149,7 @@ class CLIInterface:
         )
         ctds_parser.add_argument("dataset_path", help="CTDS数据集路径")
         ctds_parser.add_argument(
-            "--project-name", help="处理后的项目名称(为空时自动生成)"
+            "--project-name", help="处理后的项目名称（为空时自动生成）"
         )
 
     def _add_image_commands(self, subparsers):
@@ -166,7 +164,7 @@ class CLIInterface:
 
         # 格式转换
         convert_parser = image_subparsers.add_parser("convert", help="转换图像格式")
-        convert_parser.add_argument("input_path", help="输入路径(文件或目录)")
+        convert_parser.add_argument("input_path", help="输入路径（文件或目录）")
         convert_parser.add_argument("--output-path", help="输出路径")
         convert_parser.add_argument(
             "--format",
@@ -183,7 +181,7 @@ class CLIInterface:
 
         # 尺寸调整
         resize_parser = image_subparsers.add_parser("resize", help="调整图像尺寸")
-        resize_parser.add_argument("input_path", help="输入路径(文件或目录)")
+        resize_parser.add_argument("input_path", help="输入路径（文件或目录）")
         resize_parser.add_argument("--output-path", help="输出路径")
         resize_parser.add_argument(
             "--size", required=True, help="目标尺寸 (WxH 或 单个数字)"
@@ -199,7 +197,7 @@ class CLIInterface:
         compress_parser = image_subparsers.add_parser("compress", help="压缩图像")
         compress_parser.add_argument("input_dir", help="输入目录")
         compress_parser.add_argument(
-            "--output-dir", help="输出目录(默认为输入目录下的compressed子目录)"
+            "--output-dir", help="输出目录（默认为输入目录下的compressed子目录）"
         )
         compress_parser.add_argument(
             "--quality", type=int, default=85, help="压缩质量 (1-100, 默认: 85)"
@@ -207,28 +205,21 @@ class CLIInterface:
         compress_parser.add_argument(
             "--format",
             choices=["jpg", "jpeg", "png", "webp"],
-            help="目标格式(默认保持原格式)",
+            help="目标格式（默认保持原格式）",
         )
         compress_parser.add_argument(
-            "--max-size", help="最大尺寸限制 (WxH,如 1920x1080)"
+            "--max-size", help="最大尺寸限制 (WxH，如 1920x1080)"
         )
         compress_parser.add_argument(
             "--recursive", action="store_true", help="递归处理子目录"
         )
         compress_parser.add_argument(
-            "--no-concurrent", action="store_true", help="禁用并发处理(默认启用)"
+            "--no-concurrent", action="store_true", help="禁用并发处理（默认启用）"
         )
         compress_parser.add_argument(
-            "--max-workers", type=int, help="最大线程数(默认为CPU核心数的20%%,最大为CPU核心数)"
-        )
-        compress_parser.add_argument(
-            "--multiprocess-batch", action="store_true", help="使用多进程分批处理(适合大量文件)"
-        )
-        compress_parser.add_argument(
-            "--batch-count", type=int, default=100, help="批次数量(默认100,仅在多进程分批模式下有效)"
-        )
-        compress_parser.add_argument(
-            "--max-processes", type=int, help="最大进程数(默认为CPU核心数,仅在多进程分批模式下有效)"
+            "--max-workers",
+            type=int,
+            help="最大线程数（默认为CPU核心数的20%，最大为CPU核心数）",
         )
 
     def _add_file_commands(self, subparsers):
@@ -246,7 +237,7 @@ class CLIInterface:
             "organize", help="按扩展名组织文件"
         )
         organize_parser.add_argument("source_dir", help="源目录")
-        organize_parser.add_argument("--output-dir", help="输出目录(默认为源目录)")
+        organize_parser.add_argument("--output-dir", help="输出目录（默认为源目录）")
         organize_parser.add_argument(
             "--by-extension", action="store_true", help="按扩展名分组"
         )
@@ -348,7 +339,7 @@ class CLIInterface:
         )
         create_empty_parser.add_argument("images_dir", help="图像目录")
         create_empty_parser.add_argument(
-            "--labels-dir", help="标签目录(默认为图像目录)"
+            "--labels-dir", help="标签目录（默认为图像目录）"
         )
         create_empty_parser.add_argument(
             "--overwrite", action="store_true", help="覆盖已存在的标签文件"
@@ -369,7 +360,7 @@ class CLIInterface:
         filter_parser = label_subparsers.add_parser("filter", help="根据类别过滤标签")
         filter_parser.add_argument("labels_dir", help="标签目录")
         filter_parser.add_argument(
-            "--classes", required=True, help="目标类别(逗号分隔)"
+            "--classes", required=True, help="目标类别（逗号分隔）"
         )
         filter_parser.add_argument(
             "--action",
@@ -402,7 +393,7 @@ class CLIInterface:
         )
 
         setup_logging(
-            log_level=log_level
+            log_level=log_level, enable_error_file=True
         )
 
         self.logger = get_logger(self.__class__.__name__)
@@ -411,7 +402,8 @@ class CLIInterface:
         """根据参数加载配置"""
         if args.config:
             try:
-                self.config_manager.load_config(args.config)
+                # 创建新的ConfigManager实例来加载指定配置文件
+                self.config_manager = ConfigManager(config_file=args.config)
                 self.logger.info(f"已加载配置文件: {args.config}")
             except Exception as e:
                 self.logger.error(f"加载配置文件失败: {e}")
@@ -462,15 +454,11 @@ class CLIInterface:
 
         try:
             if args.yolo_action == "validate":
-                result = processor.get_dataset_statistics(
-                    args.dataset_path, args.images_dir, args.labels_dir
-                )
+                result = processor.get_dataset_statistics(args.dataset_path)
                 self._print_result(result)
 
             elif args.yolo_action == "remove-class0":
-                result = processor.remove_class0_only_data(
-                    args.dataset_path, args.images_dir, args.labels_dir
-                )
+                result = processor.remove_zero_only_labels(args.dataset_path)
                 self._print_result(result)
 
             elif args.yolo_action == "process-ctds":
@@ -526,29 +514,17 @@ class CLIInterface:
                 if args.max_size:
                     max_size = self._parse_size(args.max_size)
 
-                # 根据用户选择使用不同的处理方法
-                if args.multiprocess_batch:
-                    result = processor.compress_images_multiprocess_batch(
-                        input_dir=args.input_dir,
-                        output_dir=args.output_dir,
-                        quality=args.quality,
-                        target_format=args.format,
-                        recursive=args.recursive,
-                        max_size=max_size,
-                        batch_count=args.batch_count,
-                        max_processes=args.max_processes,
-                    )
-                else:
-                    result = processor.compress_images(
-                        input_dir=args.input_dir,
-                        output_dir=args.output_dir,
-                        quality=args.quality,
-                        target_format=args.format,
-                        recursive=args.recursive,
-                        max_size=max_size,
-                        concurrent=not args.no_concurrent,
-                        max_workers=args.max_workers,
-                    )
+                compress_kwargs = {
+                    "input_dir": args.input_dir,
+                    "output_dir": args.output_dir,
+                    "quality": args.quality,
+                    "target_format": args.format,
+                    "recursive": args.recursive,
+                }
+                if max_size is not None:
+                    compress_kwargs["max_size"] = max_size
+                
+                result = processor.compress_images(**compress_kwargs)
                 self._print_result(result)
 
                 # 显示压缩统计信息
@@ -586,8 +562,8 @@ class CLIInterface:
 
         try:
             if args.file_action == "organize":
-                result = processor.organize_by_extension(
-                    args.source_dir, output_dir=args.output_dir, copy_files=args.copy
+                result = processor.organize_files_by_extension(
+                    args.source_dir, target_dir=args.output_dir if args.output_dir else args.source_dir, create_subdirs=args.by_extension
                 )
                 self._print_result(result)
 
@@ -625,11 +601,10 @@ class CLIInterface:
             if args.dataset_action == "split":
                 result = processor.split_dataset(
                     args.dataset_path,
-                    output_path=args.output_dir,
+                    output_path=args.output_dir or f"{args.dataset_path}_split",
                     train_ratio=args.train_ratio,
                     val_ratio=args.val_ratio,
                     test_ratio=args.test_ratio,
-                    dataset_format=args.format,
                 )
                 self._print_result(result)
 
@@ -652,7 +627,7 @@ class CLIInterface:
                     )
                 else:
                     # 使用标准数据集验证
-                    result = processor.get_dataset_statistics(args.dataset_path)
+                    result = processor.analyze_dataset(args.dataset_path)
                 self._print_result(result)
 
             elif args.dataset_action == "analyze":
@@ -725,7 +700,7 @@ class CLIInterface:
             self.logger.error(f"标签操作失败: {e}")
             return 1
 
-    def _parse_size(self, size_str: str) -> tuple:
+    def _parse_size(self, size_str: str) -> tuple[int, int]:
         """解析尺寸字符串"""
         if "x" in size_str.lower():
             parts = size_str.lower().split("x")
@@ -776,7 +751,17 @@ class CLIInterface:
             return self.execute_command(parsed_args)
 
         except SystemExit as e:
-            return e.code if e.code is not None else 0
+            # SystemExit.code 可能是 int、str 或 None，需要确保返回 int
+            if e.code is None:
+                return 0
+            elif isinstance(e.code, int):
+                return e.code
+            else:
+                # 如果是字符串或其他类型，尝试转换为int，失败则返回1
+                try:
+                    return int(e.code)
+                except (ValueError, TypeError):
+                    return 1
         except Exception as e:
             print(f"致命错误: {e}", file=sys.stderr)
             return 1
