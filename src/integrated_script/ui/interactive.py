@@ -123,7 +123,7 @@ class InteractiveInterface:
                 ("目标检测数据集验证", self._yolo_detection_statistics),
                 ("目标分割数据集验证", self._yolo_segmentation_statistics),
                 ("清理不匹配文件", self._yolo_clean_unmatched),
-                ("合并多个数据集", self._yolo_merge_datasets),
+                ("合并多个数据集(相同类型)", self._yolo_merge_datasets),
                 ("返回主菜单", None),
             ],
         }
