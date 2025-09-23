@@ -1183,6 +1183,346 @@ class YOLOProcessor(DatasetProcessor):
             self.logger.error(f"数据集合并失败: {str(e)}")
             raise DatasetError(f"数据集合并失败: {str(e)}")
 
+    def merge_different_type_datasets(
+        self,
+        dataset_paths: List[str],
+        output_path: str,
+        output_name: str = None,
+        image_prefix: str = "img",
+        dataset_order: List[int] = None,
+    ) -> Dict[str, Any]:
+        """合并多个不同类型的YOLO数据集
+
+        Args:
+            dataset_paths: 数据集路径列表
+            output_path: 输出目录路径
+            output_name: 输出数据集名称（可选，默认自动生成）
+            image_prefix: 图片前缀名称（默认为"img"）
+            dataset_order: 数据集处理顺序（可选，默认按输入顺序）
+
+        Returns:
+            Dict[str, Any]: 合并结果
+        """
+        try:
+            self.logger.info(f"开始合并 {len(dataset_paths)} 个不同类型数据集")
+
+            # 验证输入路径
+            validated_paths = []
+            for path in dataset_paths:
+                validated_path = validate_path(path, must_exist=True, must_be_dir=True)
+                validated_paths.append(validated_path)
+
+            # 如果指定了顺序，重新排列数据集
+            if dataset_order:
+                if len(dataset_order) != len(validated_paths):
+                    raise DatasetError("数据集顺序列表长度与数据集数量不匹配")
+                if set(dataset_order) != set(range(len(validated_paths))):
+                    raise DatasetError("数据集顺序列表包含无效索引")
+                validated_paths = [validated_paths[i] for i in dataset_order]
+
+            # 收集所有数据集的类别信息
+            all_classes_info = self._collect_all_classes_info(validated_paths)
+
+            # 生成统一的类别映射
+            unified_classes, class_mappings = self._create_unified_class_mapping(
+                all_classes_info
+            )
+
+            # 生成输出目录名称
+            if not output_name:
+                output_name = self._generate_different_output_name(
+                    unified_classes, validated_paths
+                )
+
+            # 创建输出目录
+            output_dir = Path(output_path) / output_name
+            create_directory(output_dir)
+
+            # 合并数据集
+            merge_result = self._merge_different_dataset_files(
+                validated_paths, output_dir, image_prefix, unified_classes, class_mappings
+            )
+
+            self.logger.info(f"不同类型数据集合并完成: {output_dir}")
+
+            return {
+                "success": True,
+                "output_path": str(output_dir),
+                "output_name": output_name,
+                "merged_datasets": len(validated_paths),
+                "total_images": merge_result["total_images"],
+                "total_labels": merge_result["total_labels"],
+                "unified_classes": unified_classes,
+                "class_mappings": class_mappings,
+                "statistics": merge_result["statistics"],
+            }
+
+        except Exception as e:
+            self.logger.error(f"不同类型数据集合并失败: {str(e)}")
+            raise DatasetError(f"不同类型数据集合并失败: {str(e)}")
+
+    def _collect_all_classes_info(self, dataset_paths: List[Path]) -> List[Dict[str, Any]]:
+        """收集所有数据集的类别信息
+
+        Args:
+            dataset_paths: 数据集路径列表
+
+        Returns:
+            List[Dict[str, Any]]: 所有数据集的类别信息
+        """
+        all_classes_info = []
+
+        for i, dataset_path in enumerate(dataset_paths):
+            classes_file = dataset_path / self.classes_file
+            if not classes_file.exists():
+                raise DatasetError(f"数据集 {dataset_path} 缺少 {self.classes_file} 文件")
+
+            try:
+                with open(classes_file, "r", encoding="utf-8") as f:
+                    classes = [line.strip() for line in f.readlines() if line.strip()]
+                
+                all_classes_info.append({
+                    "dataset_index": i,
+                    "dataset_path": dataset_path,
+                    "classes": classes,
+                })
+            except Exception as e:
+                raise DatasetError(f"读取 {classes_file} 失败: {str(e)}")
+
+        return all_classes_info
+
+    def _create_unified_class_mapping(
+        self, all_classes_info: List[Dict[str, Any]]
+    ) -> Tuple[List[str], List[Dict[int, int]]]:
+        """创建统一的类别映射
+
+        Args:
+            all_classes_info: 所有数据集的类别信息
+
+        Returns:
+            Tuple[List[str], List[Dict[int, int]]]: 统一类别列表和每个数据集的类别映射
+        """
+        # 收集所有唯一的类别名称
+        all_unique_classes = []
+        seen_classes = set()
+
+        for classes_info in all_classes_info:
+            for class_name in classes_info["classes"]:
+                if class_name not in seen_classes:
+                    all_unique_classes.append(class_name)
+                    seen_classes.add(class_name)
+
+        # 为每个数据集创建类别映射
+        class_mappings = []
+        for classes_info in all_classes_info:
+            mapping = {}
+            for old_class_id, class_name in enumerate(classes_info["classes"]):
+                new_class_id = all_unique_classes.index(class_name)
+                mapping[old_class_id] = new_class_id
+            class_mappings.append(mapping)
+
+        return all_unique_classes, class_mappings
+
+    def _generate_different_output_name(
+        self, unified_classes: List[str], dataset_paths: List[Path]
+    ) -> str:
+        """为不同类型数据集生成输出目录名称
+
+        Args:
+            unified_classes: 统一类别列表
+            dataset_paths: 数据集路径列表
+
+        Returns:
+            str: 输出目录名称
+        """
+        # 计算总图片数量
+        total_images = 0
+        for dataset_path in dataset_paths:
+            image_files = get_file_list(
+                dataset_path, self.image_extensions, recursive=True
+            )
+            total_images += len(image_files)
+
+        # 使用类别名称拼接作为前缀
+        classes_prefix = "_".join(unified_classes[:3])  # 最多使用前3个类别名
+        if len(unified_classes) > 3:
+            classes_prefix += f"_etc{len(unified_classes)}"
+
+        # 生成最终名称
+        output_name = f"{classes_prefix}_mixed_{len(dataset_paths)}ds_{total_images}imgs"
+
+        # 清理文件名中的非法字符
+        output_name = re.sub(r'[<>:"/\\|?*]', "_", output_name)
+
+        return output_name
+
+    def _merge_different_dataset_files(
+        self,
+        dataset_paths: List[Path],
+        output_dir: Path,
+        image_prefix: str,
+        unified_classes: List[str],
+        class_mappings: List[Dict[int, int]],
+    ) -> Dict[str, Any]:
+        """合并不同类型数据集文件
+
+        Args:
+            dataset_paths: 数据集路径列表
+            output_dir: 输出目录
+            image_prefix: 图片前缀
+            unified_classes: 统一类别列表
+            class_mappings: 类别映射列表
+
+        Returns:
+            Dict[str, Any]: 合并结果
+        """
+        # 性能监控开始
+        start_time = time.time()
+        total_images = 0
+        total_labels = 0
+        statistics = []
+
+        # 创建输出子目录
+        images_dir = output_dir / "images"
+        labels_dir = output_dir / "labels"
+        create_directory(images_dir)
+        create_directory(labels_dir)
+
+        # 创建统一的classes.txt
+        classes_file = output_dir / self.classes_file
+        with open(classes_file, "w", encoding="utf-8") as f:
+            for class_name in unified_classes:
+                f.write(f"{class_name}\n")
+
+        current_index = 1
+
+        for i, dataset_path in enumerate(dataset_paths):
+            dataset_start_time = time.time()
+            self.logger.info(f"处理数据集 {i+1}/{len(dataset_paths)}: {dataset_path}")
+
+            # 获取数据集文件
+            image_files = get_file_list(
+                dataset_path, self.image_extensions, recursive=True
+            )
+            label_files = get_file_list(
+                dataset_path, [self.label_extension], recursive=True
+            )
+
+            # 过滤掉classes.txt
+            label_files = [lbl for lbl in label_files if lbl.name != self.classes_file]
+
+            dataset_stats = {
+                "dataset_path": str(dataset_path),
+                "images_count": len(image_files),
+                "labels_count": len(label_files),
+                "start_index": current_index,
+            }
+
+            # 建立标签映射索引
+            label_mapping = self._build_label_mapping(label_files)
+
+            # 处理图像和标签文件
+            images_processed = 0
+            labels_processed = 0
+
+            for image_file in image_files:
+                try:
+                    # 生成新的文件名
+                    new_name = f"{image_prefix}_{current_index:05d}{image_file.suffix}"
+                    new_image_path = images_dir / new_name
+
+                    # 复制图像文件
+                    copy_file_safe(image_file, new_image_path)
+                    images_processed += 1
+
+                    # 查找对应的标签文件
+                    stem = image_file.stem
+                    if stem in label_mapping:
+                        label_file = label_mapping[stem]
+                        new_label_name = f"{image_prefix}_{current_index:05d}.txt"
+                        new_label_path = labels_dir / new_label_name
+
+                        # 复制并转换标签文件
+                        self._copy_and_convert_label(
+                            label_file, new_label_path, class_mappings[i]
+                        )
+                        labels_processed += 1
+
+                    current_index += 1
+
+                except Exception as e:
+                    self.logger.error(f"处理文件失败 {image_file}: {str(e)}")
+
+            dataset_time = time.time() - dataset_start_time
+            dataset_stats.update({
+                "end_index": current_index - 1,
+                "images_processed": images_processed,
+                "labels_processed": labels_processed,
+                "processing_time": round(dataset_time, 2),
+            })
+
+            statistics.append(dataset_stats)
+            total_images += images_processed
+            total_labels += labels_processed
+
+            self.logger.info(
+                f"数据集 {i+1} 处理完成: {images_processed} 图像, {labels_processed} 标签"
+            )
+
+        total_time = time.time() - start_time
+
+        return {
+            "total_images": total_images,
+            "total_labels": total_labels,
+            "statistics": statistics,
+            "processing_time": round(total_time, 2),
+        }
+
+    def _copy_and_convert_label(
+        self, source_label: Path, target_label: Path, class_mapping: Dict[int, int]
+    ) -> None:
+        """复制并转换标签文件的类别ID
+
+        Args:
+            source_label: 源标签文件
+            target_label: 目标标签文件
+            class_mapping: 类别映射字典
+        """
+        try:
+            with open(source_label, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            converted_lines = []
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                parts = line.split()
+                if len(parts) < 5:  # 至少需要类别ID和4个坐标
+                    continue
+
+                try:
+                    old_class_id = int(parts[0])
+                    if old_class_id in class_mapping:
+                        new_class_id = class_mapping[old_class_id]
+                        parts[0] = str(new_class_id)
+                        converted_lines.append(" ".join(parts))
+                    else:
+                        self.logger.warning(
+                            f"标签文件 {source_label} 中发现未知类别ID: {old_class_id}"
+                        )
+                except ValueError:
+                    self.logger.warning(f"标签文件 {source_label} 中发现无效类别ID: {parts[0]}")
+
+            with open(target_label, "w", encoding="utf-8") as f:
+                for line in converted_lines:
+                    f.write(f"{line}\n")
+
+        except Exception as e:
+            self.logger.error(f"转换标签文件失败 {source_label}: {str(e)}")
+            raise
+
     def _validate_classes_consistency(
         self, dataset_paths: List[Path]
     ) -> Dict[str, Any]:

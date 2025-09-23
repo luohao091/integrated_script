@@ -124,6 +124,7 @@ class InteractiveInterface:
                 ("目标分割数据集验证", self._yolo_segmentation_statistics),
                 ("清理不匹配文件", self._yolo_clean_unmatched),
                 ("合并多个数据集(相同类型)", self._yolo_merge_datasets),
+                ("合并多个数据集(不同类型)", self._yolo_merge_different_datasets),
                 ("返回主菜单", None),
             ],
         }
@@ -1213,6 +1214,241 @@ class InteractiveInterface:
                 print(f"\n✓ 合并后的数据集已保存到: {result['output_path']}")
             else:
                 print(f"\n❌ 数据集合并失败: {result.get('error', '未知错误')}")
+
+        except KeyboardInterrupt:
+            print("\n合并数据集失败: 用户中断操作 (Code: USER_INTERRUPT)")
+        except Exception as e:
+            print(f"\n合并数据集失败: {e}")
+
+        self._pause()
+
+    def _yolo_merge_different_datasets(self) -> None:
+        """合并多个不同类型的YOLO数据集"""
+        try:
+            print("\n=== 合并不同类型YOLO数据集 ===")
+            print("此功能将合并多个不同类型的YOLO格式数据集，包括:")
+            print("- 自动处理不同数据集的类别差异")
+            print("- 生成统一的类别映射")
+            print("- 支持用户自定义数据集处理顺序")
+            print("- 自动重命名类别ID避免冲突")
+            print("- 统一图片前缀并格式化为5位数字")
+            print("- 提供详细的合并统计信息")
+
+            # 收集数据集路径
+            dataset_paths = []
+            print("\n请输入要合并的数据集路径（至少2个）:")
+
+            while True:
+                prompt = f"数据集 {len(dataset_paths) + 1} 路径（回车结束输入）: "
+                path = input(prompt).strip()
+
+                if not path:
+                    if len(dataset_paths) < 2:
+                        print("⚠ 至少需要输入2个数据集路径")
+                        continue
+                    else:
+                        break
+
+                # 验证路径
+                if not Path(path).exists():
+                    print(f"⚠ 路径不存在: {path}")
+                    continue
+
+                if not Path(path).is_dir():
+                    print(f"⚠ 路径不是目录: {path}")
+                    continue
+
+                dataset_paths.append(path)
+                print(f"✓ 已添加数据集: {path}")
+
+            print(f"\n共收集到 {len(dataset_paths)} 个数据集")
+
+            # 显示数据集类别信息
+            processor = self._get_processor("yolo")
+            path_objects = [Path(path) for path in dataset_paths]
+            
+            print("\n=== 数据集类别信息 ===")
+            all_classes_info = processor._collect_all_classes_info(path_objects)
+            
+            for i, info in enumerate(all_classes_info):
+                print(f"数据集 {i+1}: {info['dataset_path'].name}")
+                print(f"  类别数: {len(info['classes'])}")
+                print(f"  类别: {', '.join(info['classes'][:5])}")
+                if len(info['classes']) > 5:
+                    print(f"  ... 等共 {len(info['classes'])} 个类别")
+                print()
+
+            # 询问是否调整数据集顺序
+            adjust_order = input("是否需要调整数据集处理顺序？(y/N): ").strip().lower()
+            dataset_order = None
+            
+            if adjust_order in ["y", "yes", "是"]:
+                print("\n当前数据集顺序:")
+                for i, path in enumerate(dataset_paths):
+                    print(f"  {i}: {Path(path).name}")
+                
+                print("\n请输入新的处理顺序（用空格分隔的数字，如: 1 0 2）:")
+                order_input = input("新顺序: ").strip()
+                
+                try:
+                    dataset_order = [int(x) for x in order_input.split()]
+                    if len(dataset_order) != len(dataset_paths):
+                        print("⚠ 顺序数量与数据集数量不匹配，将使用默认顺序")
+                        dataset_order = None
+                    elif set(dataset_order) != set(range(len(dataset_paths))):
+                        print("⚠ 顺序包含无效索引，将使用默认顺序")
+                        dataset_order = None
+                    else:
+                        print("✓ 已设置自定义处理顺序")
+                        reordered_paths = [dataset_paths[i] for i in dataset_order]
+                        print("新的处理顺序:")
+                        for i, path in enumerate(reordered_paths):
+                            print(f"  {i+1}. {Path(path).name}")
+                except ValueError:
+                    print("⚠ 输入格式错误，将使用默认顺序")
+                    dataset_order = None
+
+            # 获取可选参数
+            print("\n=== 可选设置 ===")
+
+            # 输出路径
+            output_path = input("输出路径（留空使用当前目录）: ").strip()
+            if not output_path:
+                output_path = "."
+            else:
+                # 验证输出路径
+                output_path_obj = Path(output_path)
+                if not output_path_obj.exists():
+                    create_parent = (
+                        input(f"路径 {output_path} 不存在，是否创建？(y/N): ")
+                        .strip()
+                        .lower()
+                    )
+                    if create_parent in ["y", "yes", "是"]:
+                        try:
+                            output_path_obj.mkdir(parents=True, exist_ok=True)
+                            print(f"✓ 已创建输出路径: {output_path}")
+                        except Exception as e:
+                            print(f"❌ 创建路径失败: {e}")
+                            self._pause()
+                            return
+                    else:
+                        print("操作已取消")
+                        self._pause()
+                        return
+                elif not output_path_obj.is_dir():
+                    print(f"❌ 指定的路径不是目录: {output_path}")
+                    self._pause()
+                    return
+
+            # 输出目录名称
+            output_dir = input("输出目录名称（留空自动生成）: ").strip()
+            if not output_dir:
+                output_dir = None
+
+            # 图片前缀
+            image_prefix = input("图片前缀（留空使用默认）: ").strip()
+            if not image_prefix:
+                image_prefix = None
+
+            # 预览统一类别映射
+            print("\n正在分析类别映射...")
+            unified_classes, class_mappings = processor._create_unified_class_mapping(all_classes_info)
+            
+            print(f"\n=== 统一类别映射预览 ===")
+            print(f"合并后总类别数: {len(unified_classes)}")
+            print(f"统一类别列表: {', '.join(unified_classes[:10])}")
+            if len(unified_classes) > 10:
+                print(f"... 等共 {len(unified_classes)} 个类别")
+
+            print("\n各数据集类别映射:")
+            for i, (info, mapping) in enumerate(zip(all_classes_info, class_mappings)):
+                print(f"数据集 {i+1} ({info['dataset_path'].name}):")
+                for old_id, new_id in mapping.items():
+                    old_class = info['classes'][old_id]
+                    new_class = unified_classes[new_id]
+                    if old_id != new_id:
+                        print(f"  {old_id}({old_class}) -> {new_id}({new_class})")
+                    else:
+                        print(f"  {old_id}({old_class}) -> 保持不变")
+
+            # 生成输出目录名称预览
+            if not output_dir:
+                suggested_name = processor._generate_different_output_name(
+                    unified_classes=unified_classes, dataset_paths=path_objects
+                )
+                print(f"\n建议输出目录名: {suggested_name}")
+
+            # 确认合并
+            print("\n=== 合并确认 ===")
+            print(f"数据集数量: {len(dataset_paths)}")
+            for i, path in enumerate(dataset_paths, 1):
+                print(f"  {i}. {path}")
+
+            print(f"输出路径: {output_path}")
+
+            if output_dir:
+                print(f"输出目录名称: {output_dir}")
+            else:
+                print("输出目录名称: 自动生成")
+
+            if image_prefix:
+                print(f"图片前缀: {image_prefix}")
+            else:
+                print("图片前缀: 使用默认(img)")
+
+            if dataset_order:
+                print(f"处理顺序: 自定义")
+            else:
+                print("处理顺序: 默认")
+
+            confirm = input("\n确认开始合并？(y/N): ").strip().lower()
+            if confirm not in ["y", "yes", "是"]:
+                print("\n操作已取消")
+                self._pause()
+                return
+
+            # 执行合并
+            print("\n正在合并不同类型数据集...")
+            result = processor.merge_different_type_datasets(
+                dataset_paths=dataset_paths,
+                output_path=output_path,
+                output_name=output_dir,
+                image_prefix=image_prefix,
+                dataset_order=dataset_order,
+            )
+
+            # 显示结果
+            if result["success"]:
+                print("\n✅ 不同类型数据集合并成功！")
+                print(f"输出目录: {result['output_path']}")
+                print(f"\n合并统计:")
+                print(f"  - 总图片数: {result['total_images']}")
+                print(f"  - 总标签数: {result['total_labels']}")
+                print(f"  - 统一类别数: {len(result['unified_classes'])}")
+                print(f"  - 合并数据集数: {result['merged_datasets']}")
+
+                if "statistics" in result:
+                    stats = result["statistics"]
+                    print(f"\n各数据集处理统计:")
+                    for i, stat in enumerate(stats):
+                        dataset_name = Path(stat['dataset_path']).name
+                        print(f"  {i+1}. {dataset_name}:")
+                        print(f"     图片: {stat['images_processed']}/{stat['images_count']}")
+                        print(f"     标签: {stat['labels_processed']}/{stat['labels_count']}")
+                        print(f"     索引范围: {stat['start_index']}-{stat['end_index']}")
+                        print(f"     处理时间: {stat['processing_time']}秒")
+
+                print(f"\n类别映射信息:")
+                print(f"  - 原始类别总数: {sum(len(info['classes']) for info in all_classes_info)}")
+                print(f"  - 统一后类别数: {len(result['unified_classes'])}")
+                print(f"  - 统一类别列表: {', '.join(result['unified_classes'][:5])}")
+                if len(result['unified_classes']) > 5:
+                    print(f"    ... 等共 {len(result['unified_classes'])} 个类别")
+
+                print(f"\n✓ 合并后的数据集已保存到: {result['output_path']}")
+            else:
+                print(f"\n❌ 不同类型数据集合并失败: {result.get('error', '未知错误')}")
 
         except KeyboardInterrupt:
             print("\n合并数据集失败: 用户中断操作 (Code: USER_INTERRUPT)")
