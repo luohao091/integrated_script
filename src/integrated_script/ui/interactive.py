@@ -119,6 +119,7 @@ class InteractiveInterface:
         menu = {
             "title": "YOLO数据集处理",
             "options": [
+                ("YOLO数据转CTDS格式", self._yolo_convert_to_ctds),
                 ("处理CTDS标注数据", self._yolo_process_ctds),
                 ("目标检测数据集验证", self._yolo_detection_statistics),
                 ("目标分割数据集验证", self._yolo_segmentation_statistics),
@@ -4123,6 +4124,50 @@ image:
 
         except Exception as e:
             print(f"依赖检查失败: {e}")
+
+        self._pause()
+
+    def _yolo_convert_to_ctds(self) -> None:
+        """将YOLO数据集重新封装为CTDS"""
+        try:
+            print("\n=== YOLO数据转CTDS格式 ===")
+            print("将现有 YOLO 数据集复制到 CTDS 结构（obj.names + obj_train_data）")
+            dataset_path = self._get_path_input(
+                "请输入YOLO数据集路径: ", must_exist=True
+            )
+            output_path = input(
+                "\n请输入CTDS输出目录（留空使用默认）："
+            ).strip()
+            output_path = output_path or None
+
+            processor = self._get_processor("yolo")
+            print("\n正在转换数据集...")
+            result = processor.convert_yolo_to_ctds_dataset(
+                dataset_path, output_path=output_path
+            )
+
+            print("\n转换结果：")
+            if result.get("success"):
+                print(f"✅ 输出路径: {result.get('output_path')}")
+                stats = result.get("statistics", {})
+                print(f"  - 标签数: {stats.get('total_labels', 0)}")
+                print(f"  - 复制标签: {stats.get('labels_copied', 0)}")
+                print(f"  - 复制图像: {stats.get('images_copied', 0)}")
+                missing = stats.get("missing_images", 0)
+                print(f"  - 缺失图像: {missing}")
+                if missing:
+                    missing_list = result.get("missing_images", [])
+                    print(
+                        f"  - 未找到图像的标签: {', '.join(missing_list[:5])}"
+                        + (" ..." if len(missing_list) > 5 else "")
+                    )
+            else:
+                print("❌ 转换失败")
+                if result.get("error"):
+                    print(f"错误信息: {result['error']}")
+
+        except Exception as e:
+            print(f"\nYOLO数据转CTDS失败: {e}")
 
         self._pause()
 

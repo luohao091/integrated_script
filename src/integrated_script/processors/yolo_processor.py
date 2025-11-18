@@ -1066,15 +1066,224 @@ class YOLOProcessor(DatasetProcessor):
         Returns:
             Optional[Path]: 对应的图像文件路径
         """
-        # 支持的图像格式
-        image_extensions = [".jpg", ".jpeg", ".png", ".bmp"]
+        return self._find_image_by_base(base_name, data_dir)
 
-        for ext in image_extensions:
-            img_file = data_dir / f"{base_name}{ext}"
-            if img_file.exists():
-                return img_file
+    def _find_image_by_base(self, base_name: str, directory: Path) -> Optional[Path]:
+        """根据文件名基准和支持的扩展名查找图像"""
+        if not directory.exists():
+            return None
+
+        # 优先尝试直接匹配常用扩展
+        for ext in self.image_extensions:
+            candidate = directory / f"{base_name}{ext}"
+            if candidate.exists():
+                return candidate
+
+        lower_base = base_name.lower()
+        valid_exts = {ext.lower() for ext in self.image_extensions}
+        for entry in directory.iterdir():
+            if not entry.is_file():
+                continue
+            if entry.suffix.lower() in valid_exts and entry.stem.lower() == lower_base:
+                return entry
 
         return None
+
+    def convert_yolo_to_ctds_dataset(
+        self, yolo_dataset_path: str, output_path: str = None
+    ) -> Dict[str, Any]:
+        """将YOLO数据集重新封装为CTDS格式"""
+        dataset_dir = None
+
+        try:
+            dataset_dir = validate_path(
+                yolo_dataset_path, must_exist=True, must_be_dir=True
+            )
+            self.logger.info(
+                f"开始将YOLO数据集转换为CTDS格式: {dataset_dir}"
+            )
+
+            labels_dir = dataset_dir / "labels"
+            images_dir = dataset_dir / "images"
+
+            if not labels_dir.exists() or not labels_dir.is_dir():
+                raise DatasetError(
+                    "未找到 labels 目录",
+                    dataset_path=str(labels_dir),
+                )
+
+            if not images_dir.exists() or not images_dir.is_dir():
+                raise DatasetError(
+                    "未找到 images 目录",
+                    dataset_path=str(images_dir),
+                )
+
+            class_candidates = [
+                dataset_dir / "obj.names",
+                dataset_dir / self.classes_file,
+            ]
+            classes_source = None
+            for candidate in class_candidates:
+                if candidate.exists() and candidate.is_file():
+                    classes_source = candidate
+                    break
+
+            if not classes_source:
+                raise DatasetError(
+                    "未找到 obj.names 或 classes.txt 文件",
+                    dataset_path=str(dataset_dir),
+                )
+
+            if output_path:
+                output_dir = Path(output_path).resolve()
+            else:
+                output_dir = (dataset_dir.parent / f"{dataset_dir.name}_ctds").resolve()
+
+            if output_dir == dataset_dir:
+                raise DatasetError(
+                    "CTDS 输出目录不能与原始YOLO数据集相同",
+                    dataset_path=str(output_dir),
+                )
+
+            if output_dir.exists():
+                if not output_dir.is_dir():
+                    raise DatasetError(
+                        "CTDS 输出路径存在但不是目录",
+                        dataset_path=str(output_dir),
+                    )
+                if any(output_dir.iterdir()):
+                    raise DatasetError(
+                        "CTDS 输出目录已存在且非空，请先清理",
+                        dataset_path=str(output_dir),
+                    )
+
+            create_directory(output_dir)
+            obj_train_data_dir = output_dir / "obj_train_data"
+            create_directory(obj_train_data_dir)
+            obj_names_path = output_dir / "obj.names"
+            copy_file_safe(classes_source, obj_names_path)
+
+            try:
+                with open(classes_source, "r", encoding="utf-8") as f:
+                    class_lines = [line.strip() for line in f if line.strip()]
+            except Exception as e:
+                raise DatasetError(
+                    f"读取类别文件失败: {str(e)}",
+                    dataset_path=str(classes_source),
+                )
+            num_classes = len(class_lines)
+
+            label_files = sorted(
+                f
+                for f in labels_dir.glob("*.txt")
+                if f.is_file()
+                and f.name.lower() != "train.txt"
+            )
+
+            result = {
+                "success": True,
+                "source_dataset": str(dataset_dir),
+                "output_path": str(output_dir),
+                "classes_source": str(classes_source),
+                "processed_files": {
+                    "labels": [],
+                    "images": [],
+                    "classes_file": str(obj_names_path),
+                },
+                "missing_images": [],
+                "statistics": {
+                    "total_labels": len(label_files),
+                    "labels_copied": 0,
+                    "images_copied": 0,
+                    "missing_images": 0,
+                    "classes_count": num_classes,
+                },
+            }
+
+            copied_labels = 0
+            copied_images = 0
+            missing_images = []
+            train_image_names = []
+
+            with progress_context(len(label_files), "YOLO转CTDS") as progress:
+                for label_file in label_files:
+                    try:
+                        target_label = obj_train_data_dir / label_file.name
+                        copy_file_safe(label_file, target_label)
+                        result["processed_files"]["labels"].append(str(target_label))
+                        copied_labels += 1
+
+                        base_name = label_file.stem
+                        image_file = self._find_image_by_base(base_name, images_dir)
+
+                        if image_file:
+                            target_image = obj_train_data_dir / image_file.name
+                            copy_file_safe(image_file, target_image)
+                            result["processed_files"]["images"].append(str(target_image))
+                            copied_images += 1
+                            train_image_names.append(target_image.name)
+                        else:
+                            missing_images.append(str(label_file.name))
+
+                    except Exception as e:
+                        self.logger.error(f"复制文件失败 {label_file}: {str(e)}")
+                        result["success"] = False
+                    finally:
+                        progress.update_progress(1)
+
+            result["missing_images"] = missing_images
+            result["statistics"]["labels_copied"] = copied_labels
+            result["statistics"]["images_copied"] = copied_images
+            result["statistics"]["missing_images"] = len(missing_images)
+
+            train_txt_path = output_dir / "train.txt"
+            try:
+                unique_train_names = train_image_names
+                if unique_train_names:
+                    train_txt_path.write_text(
+                        "\n".join(unique_train_names), encoding="utf-8"
+                    )
+                else:
+                    train_txt_path.write_text("", encoding="utf-8")
+            except Exception as e:
+                self.logger.warning(f"写入train.txt失败: {e}")
+
+            obj_data_path = output_dir / "obj.data"
+            try:
+                obj_data_content = (
+                    f"classes = {num_classes}\n"
+                    "train = data/train.txt\n"
+                    "names = data/obj.names\n"
+                    "backup = backup/\n"
+                )
+                obj_data_path.write_text(obj_data_content, encoding="utf-8")
+            except Exception as e:
+                self.logger.warning(f"写入obj.data失败: {e}")
+
+            result["generated_files"] = {
+                "obj_data": str(obj_data_path),
+                "train_file": str(train_txt_path),
+                "obj_train_data": str(obj_train_data_dir),
+            }
+
+            self.logger.info(
+                f"YOLO转CTDS完成: {copied_labels} 个标签, {copied_images} 张图像写入 {obj_train_data_dir}"
+            )
+
+            if missing_images:
+                self.logger.warning(
+                    f"以下标签未找到对应图像: {', '.join(missing_images[:5])}"
+                    + (" ..." if len(missing_images) > 5 else "")
+                )
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"YOLO转CTDS失败: {str(e)}")
+            raise DatasetError(
+                f"YOLO转CTDS失败: {str(e)}",
+                dataset_path=str(dataset_dir) if dataset_dir else yolo_dataset_path,
+            )
 
     def _convert_images_with_opencv(self, images_dir: Path) -> None:
         """使用OpenCV重新保存图像
