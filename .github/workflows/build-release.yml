@@ -28,11 +28,19 @@ jobs:
       run: python build_exe.py
 
     - name: Rename executable with release tag
+      env:
+        TAG: ${{ github.ref_name }}
       run: |
-        exe="dist/integrated_script.exe"
-        if [ -f "$exe" ]; then
-          mv "$exe" "dist/integrated_script-${GITHUB_REF##*/}.exe"
-        fi
+        python - <<'PY'
+        import os
+        from pathlib import Path
+
+        exe = Path("dist/integrated_script.exe")
+        tag = os.environ.get("TAG")
+        if exe.exists() and tag:
+            new_name = exe.with_name(f"integrated_script-{tag}.exe")
+            exe.rename(new_name)
+        PY
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
