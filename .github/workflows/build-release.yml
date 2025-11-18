@@ -30,6 +30,7 @@ jobs:
     - name: Rename executable with release tag
       env:
         TAG: ${{ github.ref_name }}
+      shell: bash
       run: |
         python - <<'PY'
         import os
