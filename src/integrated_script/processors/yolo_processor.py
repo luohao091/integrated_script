@@ -470,7 +470,7 @@ class YOLOProcessor(DatasetProcessor):
     def process_ctds_dataset(
         self, input_path: str, output_name: str = None
     ) -> Dict[str, Any]:
-        """处理CTDS标注数据
+        """CTDS数据转YOLO格式
 
         基于yolo_dataset_cleaner.py的逻辑，处理CTDS格式的标注数据：
         - 剔除空标签文件或包含非法标注数据的文件

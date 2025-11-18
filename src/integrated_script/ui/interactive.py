@@ -120,7 +120,7 @@ class InteractiveInterface:
             "title": "YOLO数据集处理",
             "options": [
                 ("YOLO数据转CTDS格式", self._yolo_convert_to_ctds),
-                ("处理CTDS标注数据", self._yolo_process_ctds),
+                ("CTDS数据转YOLO格式", self._yolo_process_ctds),
                 ("目标检测数据集验证", self._yolo_detection_statistics),
                 ("目标分割数据集验证", self._yolo_segmentation_statistics),
                 ("清理不匹配文件", self._yolo_clean_unmatched),
@@ -133,9 +133,9 @@ class InteractiveInterface:
         self._pause()
 
     def _yolo_process_ctds(self) -> None:
-        """处理CTDS标注数据"""
+        """CTDS数据转YOLO格式"""
         try:
-            print("\n=== 处理CTDS标注数据 ===")
+            print("\n=== CTDS数据转YOLO格式 ===")
             print("此功能将处理CTDS格式的标注数据，包括:")
             print("- 剔除空标签或非法标注数据")
             print("- 重命名图像和标签文件")
@@ -207,7 +207,7 @@ class InteractiveInterface:
             #     self._handle_post_ctds_validation(result)
 
         except Exception as e:
-            print(f"\n处理CTDS标注数据失败: {e}")
+            print(f"\nCTDS数据转YOLO格式失败: {e}")
 
         self._pause()
 

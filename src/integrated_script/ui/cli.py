@@ -145,7 +145,7 @@ class CLIInterface:
 
         # CTDS数据处理
         ctds_parser = yolo_subparsers.add_parser(
-            "process-ctds", help="处理CTDS标注数据"
+            "process-ctds", help="CTDS数据转YOLO格式"
         )
         ctds_parser.add_argument("dataset_path", help="CTDS数据集路径")
         ctds_parser.add_argument(
