@@ -8,8 +8,11 @@ PyInstaller build script
 Used to package integrated_script project as Windows executable
 """
 
+import importlib.util
 import os
+import shlex
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -40,17 +43,27 @@ def build_exe():
         except PermissionError:
             print("Warning: Cannot delete build directory, continuing...")
 
+    if importlib.util.find_spec("PyInstaller") is None:
+        print(
+            "Error: PyInstaller is not available in the current Python interpreter."
+            " Install it in this environment (for example `python -m pip install pyinstaller`)."
+        )
+        return False
+
+    data_separator = ";" if os.name == "nt" else ":"
     # PyInstaller command
     cmd_parts = [
-        "pyinstaller",
+        sys.executable,
+        "-m",
+        "PyInstaller",
         "--onefile",  # Package as single exe file
         "--console",  # Show console window
         "--name=integrated_script",  # Executable file name
         f"--distpath={project_root / 'dist'}",  # Specify output directory
         f"--workpath={project_root / 'build'}",  # Specify work directory
-        f"--add-data={src_dir};src",  # Add source code directory
-        f"--add-data={script_dir / 'requirements.txt'};.",  # Add requirements.txt
-        f"--add-data={script_dir / 'config'};config",  # Add config directory
+        f"--add-data={src_dir}{data_separator}src",  # Add source code directory
+        f"--add-data={script_dir / 'requirements.txt'}{data_separator}.",  # Add requirements.txt
+        f"--add-data={script_dir / 'config'}{data_separator}config",  # Add config directory
         "--hidden-import=integrated_script",
         "--hidden-import=integrated_script.config",
         "--hidden-import=integrated_script.core",
@@ -72,13 +85,20 @@ def build_exe():
     ]
 
     # Execute PyInstaller command
-    cmd = " ".join(cmd_parts)
-    print(f"Executing command: {cmd}")
+    try:
+        command_display = shlex.join(cmd_parts)
+    except AttributeError:
+        command_display = " ".join(shlex.quote(part) for part in cmd_parts)
+    print(f"Executing command: {command_display}")
+    try:
+        result = subprocess.run(cmd_parts)
+    except FileNotFoundError:
+        print("Build failed: Python executable disappeared from PATH.")
+        return False
 
-    result = os.system(cmd)
-
-    if result == 0:
-        exe_path = project_root / "dist" / "integrated_script.exe"
+    if result.returncode == 0:
+        exe_name = "integrated_script.exe" if os.name == "nt" else "integrated_script"
+        exe_path = project_root / "dist" / exe_name
         if exe_path.exists():
             print("\nBuild successful!")
             print(f"Executable location: {exe_path}")

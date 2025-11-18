@@ -52,6 +52,28 @@ pip install -e ".[dev]"
 pip install -e ".[docs]"
 ```
 
+### 构建可执行文件
+
+PyInstaller 需要在当前 Python 环境中安装；如果系统使用 PEP 668 管理，推荐用虚拟环境来避免全局安装限制：
+
+```bash
+# Linux/macOS
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install pyinstaller
+.venv/bin/python build_exe.py
+
+# Windows PowerShell
+python -m venv .venv
+.venv\\Scripts\\Activate.ps1
+pip install -r requirements.txt
+pip install pyinstaller
+.venv\\Scripts\\python.exe build_exe.py
+```
+
+此时可执行文件会落在 `dist/` 中，Linux 下是 `dist/integrated_script`，Windows 生成 `.exe`。
+
 ## 📖 使用方法
 
 ### 交互式模式
