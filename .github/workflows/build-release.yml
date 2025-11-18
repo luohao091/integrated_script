@@ -27,9 +27,16 @@ jobs:
     - name: Build executable
       run: python build_exe.py
 
+    - name: Rename executable with release tag
+      run: |
+        exe="dist/integrated_script.exe"
+        if [ -f "$exe" ]; then
+          mv "$exe" "dist/integrated_script-${GITHUB_REF##*/}.exe"
+        fi
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/integrated_script.exe
+        files: dist/integrated_script-${{ github.ref_name }}.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
