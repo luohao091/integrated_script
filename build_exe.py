@@ -18,25 +18,16 @@ from pathlib import Path
 
 
 def build_exe():
-    """Build executable file"""
+    """Build the executable with inline PyInstaller configuration."""
 
-    # Project root directory - directory where build_exe.py is located
-    script_dir = Path(__file__).parent  # Directory where build_exe.py is located
-    project_root = (
-        script_dir  # Project root is the directory where build_exe.py is located
-    )
-    src_dir = script_dir / "src"
-    main_script = script_dir / "main.py"
+    project_root = Path(__file__).parent
+    main_script = project_root / "main.py"
 
-    # Ensure main script exists
     if not main_script.exists():
         print(f"Error: Main script not found {main_script}")
         return False
 
-    # Clean previous builds
     build_dir = project_root / "build"
-
-    # Only clean build directory, let PyInstaller handle dist directory automatically
     if build_dir.exists():
         try:
             shutil.rmtree(build_dir)
@@ -51,40 +42,74 @@ def build_exe():
         return False
 
     data_separator = ";" if os.name == "nt" else ":"
-    # PyInstaller command
+    add_data = [
+        f"{project_root / 'config'}{data_separator}config",
+        f"{project_root / 'requirements.txt'}{data_separator}.",
+    ]
+
+    hidden_imports = [
+        "integrated_script",
+        "integrated_script.config",
+        "integrated_script.core",
+        "integrated_script.processors",
+        "integrated_script.ui",
+        "PIL",
+        "cv2",
+        "yaml",
+        "tqdm",
+        "logging.handlers",
+        "logging.config",
+        "argparse",
+        "pathlib",
+        "json",
+        "datetime",
+        "typing",
+    ]
+
+    collect_args = [
+        "--collect-submodules=integrated_script",
+        "--collect-data=integrated_script",
+    ]
+
+    exclude_modules = ["tkinter", "PyQt5", "PyQt6"]
+
+    upx_path = shutil.which("upx")
+    upx_args = []
+    if upx_path:
+        upx_args = ["--upx-dir", str(Path(upx_path).resolve().parent)]
+    else:
+        print("Notice: UPX not found, build will omit binary compression.")
+
     cmd_parts = [
         sys.executable,
         "-m",
         "PyInstaller",
-        "--onefile",  # Package as single exe file
-        "--console",  # Show console window
-        "--name=integrated_script",  # Executable file name
-        f"--distpath={project_root / 'dist'}",  # Specify output directory
-        f"--workpath={project_root / 'build'}",  # Specify work directory
-        f"--add-data={src_dir}{data_separator}src",  # Add source code directory
-        f"--add-data={script_dir / 'requirements.txt'}{data_separator}.",  # Add requirements.txt
-        f"--add-data={script_dir / 'config'}{data_separator}config",  # Add config directory
-        "--hidden-import=integrated_script",
-        "--hidden-import=integrated_script.config",
-        "--hidden-import=integrated_script.core",
-        "--hidden-import=integrated_script.processors",
-        "--hidden-import=integrated_script.ui",
-        "--hidden-import=PIL",
-        "--hidden-import=cv2",
-        "--hidden-import=yaml",
-        "--hidden-import=tqdm",
-        "--hidden-import=logging.handlers",
-        "--hidden-import=logging.config",
-        "--hidden-import=argparse",
-        "--hidden-import=pathlib",
-        "--hidden-import=json",
-        "--hidden-import=datetime",
-        "--hidden-import=typing",
-        "--collect-all=integrated_script",
-        str(main_script),
+        "--clean",
+        "--noconfirm",
+        "--onefile",
+        "--console",
+        # "--strip",
+        "--name=integrated_script",
+        "--distpath",
+        str(project_root / "dist"),
+        "--workpath",
+        str(project_root / "build"),
     ]
+    cmd_parts += upx_args
 
-    # Execute PyInstaller command
+    for data in add_data:
+        cmd_parts += ["--add-data", data]
+
+    for module in hidden_imports:
+        cmd_parts += ["--hidden-import", module]
+
+    cmd_parts += collect_args
+
+    for module in exclude_modules:
+        cmd_parts += ["--exclude-module", module]
+
+    cmd_parts.append(str(main_script))
+
     try:
         command_display = shlex.join(cmd_parts)
     except AttributeError:
