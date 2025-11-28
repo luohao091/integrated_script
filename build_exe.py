@@ -97,6 +97,8 @@ def build_exe():
     ]
     cmd_parts += upx_args
 
+    cmd_parts += ["--paths", str(project_root / "src")]
+
     for data in add_data:
         cmd_parts += ["--add-data", data]
 

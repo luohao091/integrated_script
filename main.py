@@ -11,7 +11,7 @@ import sys
 
 # 添加 src 目录到 Python 路径
 src_path = os.path.join(os.path.dirname(__file__), "src")
-if src_path not in sys.path:
+if os.path.isdir(src_path) and src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 # Windows 兼容性处理
