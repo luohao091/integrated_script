@@ -527,7 +527,7 @@ class ImageProcessor(BaseProcessor):
 
         normalized_extensions = self._normalize_extensions(extensions)
         if not normalized_extensions:
-            normalized_extensions = [".jpg", ".jpeg"]
+            normalized_extensions = [".jpg", ".jpeg", ".png"]
 
         image_files = []
         globber = dir_path.rglob if recursive else dir_path.iterdir
@@ -608,8 +608,18 @@ class ImageProcessor(BaseProcessor):
                 operation="read_image",
             )
 
-        fmt = image_path.suffix.lower() if image_path.suffix.lower() in {".jpg", ".jpeg"} else ".jpg"
-        success, encoded = cv2.imencode(fmt, image, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        suffix = image_path.suffix.lower()
+        if suffix in {".jpg", ".jpeg"}:
+            fmt = ".jpg"
+            params = [cv2.IMWRITE_JPEG_QUALITY, 95]
+        elif suffix == ".png":
+            fmt = ".png"
+            params = [cv2.IMWRITE_PNG_COMPRESSION, 3]
+        else:
+            # 尽量保留原后缀，但回退到 PNG 以保证通道兼容
+            fmt = suffix if suffix and suffix.startswith(".") else ".png"
+            params = []
+        success, encoded = cv2.imencode(fmt, image, params)
         if not success:
             raise FileProcessingError(
                 "OpenCV 无法编码图像",
