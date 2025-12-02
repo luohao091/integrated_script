@@ -1466,6 +1466,10 @@ class InteractiveInterface:
                 ("格式转换", self._image_convert),
                 ("尺寸调整", self._image_resize),
                 ("图像压缩", self._image_compress),
+                (
+                    "修复 OpenCV 读取错误的图像",
+                    self._image_repair_corrupted_images,
+                ),
                 ("获取图像信息", self._image_info),
                 ("返回主菜单", None),
             ],
@@ -1657,6 +1661,52 @@ class InteractiveInterface:
             print(f"\n获取图像信息失败: {e}")
 
         self._pause()
+
+    def _image_repair_corrupted_images(self) -> None:
+        """修复因 OpenCV 加载失败的图像"""
+        try:
+            print("\n=== 修复 OpenCV 读取错误的图像 ===")
+
+            directory = self._get_path_input(
+                "请输入要检查的图像目录: ", must_exist=True, must_be_dir=True
+            )
+
+            recursive = self._get_yes_no_input("是否递归子目录?", default=True)
+            extensions = None
+
+            processor = self._get_processor("image")
+
+            print("\n正在尝试用 OpenCV 读取图像，若读取失败将重新保存...")
+            result = processor.repair_images_with_opencv(
+                directory,
+                extensions=extensions,
+                recursive=recursive,
+                include_hidden=False,
+            )
+
+            total = result.get("total_files", 0)
+            loaded = result.get("loaded_without_issue", 0)
+            repaired = result.get("repaired_count", 0)
+            failed = result.get("failed_count", 0)
+
+            print(
+                f"\n处理完成: 共检查 {total} 张，OpenCV 成功加载 {loaded} 张，重新保存 {repaired} 张，失败 {failed} 张"
+            )
+
+            if failed:
+                print("修复失败的文件:")
+                for failure in result.get("failed_files", []):
+                    print(f"  - {failure.get('file')}: {failure.get('error')}")
+
+        except UserInterruptError:
+            print(
+                "\n修复操作被用户中断 (Code: USER_INTERRUPT)，按回车键继续..."
+            )
+            input()
+        except Exception as e:
+            print(f"\n修复失败: {e}")
+        finally:
+            self._pause()
 
     def _display_enhanced_image_info(self, result: Dict[str, Any]) -> None:
         """增强的图像信息显示"""

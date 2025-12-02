@@ -16,6 +16,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import numpy as np
+
 try:
     from tqdm import tqdm
 
@@ -506,6 +508,134 @@ class ImageProcessor(BaseProcessor):
             self._convert_with_cv2(input_file, output_file, target_format, quality)
         else:
             raise ProcessingError("没有可用的图像处理库")
+
+    def repair_images_with_opencv(
+        self,
+        directory: Union[str, Path],
+        extensions: Optional[List[str]] = None,
+        recursive: bool = False,
+        include_hidden: bool = False,
+    ) -> Dict[str, Any]:
+        """尝试使用 OpenCV 读取目录中的图像，加载失败时重新保存"""
+
+        if not CV2_AVAILABLE:
+            raise ProcessingError(
+                "修复图像需要安装 opencv-python，可通过 pip install opencv-python 安装。"
+            )
+
+        dir_path = validate_path(os.fsdecode(directory), must_exist=True, must_be_dir=True)
+
+        normalized_extensions = self._normalize_extensions(extensions)
+        if not normalized_extensions:
+            normalized_extensions = [".jpg", ".jpeg"]
+
+        image_files = []
+        globber = dir_path.rglob if recursive else dir_path.iterdir
+        for entry in globber("*"):
+            if not entry.is_file():
+                continue
+            if not include_hidden and entry.name.startswith("."):
+                continue
+            if entry.suffix.lower() not in normalized_extensions:
+                continue
+            image_files.append(entry)
+
+        repaired_files: List[str] = []
+        failed_files: List[Dict[str, Any]] = []
+        loaded_files: List[str] = []
+        total_files = len(image_files)
+
+        iterator = image_files
+        using_tqdm = TQDM_AVAILABLE and total_files > 0
+        if using_tqdm:
+            iterator = tqdm(image_files, desc="修复图像", unit="张", total=total_files)
+
+        for idx, img_file in enumerate(iterator, start=1):
+            try:
+                image = self._load_and_rewrite(img_file)
+                repaired_files.append(str(img_file))
+                loaded_files.append(str(img_file))
+                continue
+            except Exception as exc:
+                failed_files.append(
+                    {
+                        "file": str(img_file),
+                        "error": str(exc),
+                    }
+                )
+
+        if not using_tqdm and total_files > 0:
+            print()
+
+        result = {
+            "success": True,
+            "directory": str(dir_path),
+            "extensions": normalized_extensions,
+            "recursive": recursive,
+            "total_files": total_files,
+            "loaded_without_issue": len(loaded_files),
+            "repaired_count": len(repaired_files),
+            "repaired_files": repaired_files,
+            "failed_count": len(failed_files),
+            "failed_files": failed_files,
+        }
+
+        self.logger.info(
+            "图像修复完成: %s，重新保存 %s 张，失败 %s 张",
+            dir_path,
+            len(repaired_files),
+            len(failed_files),
+        )
+
+        return result
+
+    def _load_and_rewrite(self, image_path: Path) -> Any:
+        try:
+            raw = image_path.read_bytes()
+        except Exception as exc:
+            raise FileProcessingError(
+                f"读取图像字节失败: {exc}",
+                file_path=str(image_path),
+                operation="read_image",
+            )
+
+        array = np.frombuffer(raw, dtype=np.uint8)
+        image = cv2.imdecode(array, cv2.IMREAD_UNCHANGED)
+        if image is None:
+            raise FileProcessingError(
+                "OpenCV 解码失败",
+                file_path=str(image_path),
+                operation="read_image",
+            )
+
+        fmt = image_path.suffix.lower() if image_path.suffix.lower() in {".jpg", ".jpeg"} else ".jpg"
+        success, encoded = cv2.imencode(fmt, image, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        if not success:
+            raise FileProcessingError(
+                "OpenCV 无法编码图像",
+                file_path=str(image_path),
+                operation="encode_image",
+            )
+
+        image_path.write_bytes(encoded.tobytes())
+        return image
+
+    def _normalize_extensions(self, extensions: Optional[List[str]]) -> List[str]:
+        if not extensions:
+            return []
+
+        normalized: List[str] = []
+        for ext in extensions:
+            if not isinstance(ext, str):
+                continue
+            clean_ext = ext.strip().lower()
+            if not clean_ext:
+                continue
+            if not clean_ext.startswith("."):
+                clean_ext = f".{clean_ext}"
+            normalized.append(clean_ext)
+
+        return normalized
 
     def _convert_with_pil(
         self, input_file: Path, output_file: Path, target_format: str, quality: int
