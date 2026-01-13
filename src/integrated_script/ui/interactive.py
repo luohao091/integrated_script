@@ -2106,6 +2106,7 @@ class InteractiveInterface:
             "options": [
                 ("单目录重命名", self._file_rename_single_dir),
                 ("数据集重命名", self._file_rename_images_labels),
+                ("数据集重命名（传统模式）", self._file_rename_images_labels_legacy),
                 ("按扩展名组织文件", self._file_organize),
                 ("递归删除JSON文件", self._file_delete_json_recursive),
                 ("批量复制文件", self._file_copy),
@@ -2200,6 +2201,76 @@ class InteractiveInterface:
             input()
         except Exception as e:
             print(f"\n移动失败: {e}")
+
+        self._pause()
+
+    def _file_rename_images_labels_legacy(self) -> None:
+        """Images/Labels同步重命名（传统模式，不补零）"""
+        try:
+            print("\n=== Images/Labels同步重命名（传统模式） ===")
+            print("此功能会同时重命名images和labels子目录中的对应文件")
+            print("文件名将直接使用序号（如: 1.jpg, 2.jpg），不补零")
+
+            source_dir = self._get_path_input(
+                "请输入包含images和labels子目录的根目录: ",
+                must_exist=True,
+                must_be_dir=True,
+            )
+
+            # 检查images和labels目录是否存在
+            source_path = Path(source_dir)
+            images_dir = source_path / "images"
+            labels_dir = source_path / "labels"
+
+            if not images_dir.exists():
+                print(f"错误: 未找到images目录: {images_dir}")
+                self._pause()
+                return
+
+            if not labels_dir.exists():
+                print(f"错误: 未找到labels目录: {labels_dir}")
+                self._pause()
+                return
+
+            print(f"找到images目录: {images_dir}")
+            print(f"找到labels目录: {labels_dir}")
+
+            prefix = self._get_input(
+                "请输入文件名前缀（空格表示无前缀）: ",
+                required=True,
+                allow_space_empty=True,
+            )
+
+            shuffle_order = self._get_yes_no_input(
+                "是否打乱文件顺序? (默认: 否) (y/n): ", default=False
+            )
+
+            if prefix:
+                print(f"\n重命名前缀: {prefix}")
+            else:
+                print("\n重命名前缀: （无前缀）")
+            print("重命名模式: 1, 2, 3...（不补零）")
+            print(f"打乱顺序: {'是' if shuffle_order else '否'}")
+
+            if not self._get_yes_no_input("\n确认开始同步重命名? (y/n): "):
+                print("操作已取消")
+                return
+
+            processor = self._get_processor("file")
+
+            print("\n正在同步重命名images和labels文件...")
+            result = processor.rename_images_labels_sync(
+                str(images_dir), str(labels_dir), prefix, 0, shuffle_order
+            )
+
+            self._display_result(result)
+
+        except UserInterruptError:
+            print(f"\n重命名失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n按回车键继续...")
+            input()
+        except Exception as e:
+            print(f"\n重命名失败: {e}")
 
         self._pause()
 
