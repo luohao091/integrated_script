@@ -2213,7 +2213,11 @@ class InteractiveInterface:
             )
 
             # 获取文件名前缀
-            prefix = self._get_input("请输入文件名前缀: ", required=True)
+            prefix = self._get_input(
+                "请输入文件名前缀（空格表示无前缀）: ",
+                required=True,
+                allow_space_empty=True,
+            )
 
             # 获取数字位数，默认为5位
             digits_input = self._get_input("请输入数字位数 (默认: 5): ")
@@ -2262,11 +2266,17 @@ class InteractiveInterface:
                 suffix = "." + suffix
 
             # 构建重命名模式
-            pattern = f"{prefix}_{{index:0{digits}d}}{suffix}"
+            if prefix:
+                pattern = f"{prefix}_{{index:0{digits}d}}{suffix}"
+            else:
+                pattern = f"{{index:0{digits}d}}{suffix}"
 
             print(f"\n重命名模式: {pattern}")
             # 显示示例时使用正确的格式
-            example_pattern = f"{prefix}_{{:0{digits}d}}{suffix}"
+            if prefix:
+                example_pattern = f"{prefix}_{{:0{digits}d}}{suffix}"
+            else:
+                example_pattern = f"{{:0{digits}d}}{suffix}"
             print(
                 f"示例: {example_pattern.format(1)}, {example_pattern.format(2)}, {example_pattern.format(3)}..."
             )
@@ -2326,7 +2336,11 @@ class InteractiveInterface:
             print(f"找到labels目录: {labels_dir}")
 
             # 获取文件名前缀
-            prefix = self._get_input("请输入文件名前缀: ", required=True)
+            prefix = self._get_input(
+                "请输入文件名前缀（空格表示无前缀）: ",
+                required=True,
+                allow_space_empty=True,
+            )
 
             # 获取数字位数，默认为5位
             digits_input = self._get_input("请输入数字位数 (默认: 5): ")
@@ -3740,17 +3754,27 @@ image:
 
     # 输入辅助方法
     def _get_input(
-        self, prompt: str, default: str = None, required: bool = False
+        self,
+        prompt: str,
+        default: str = None,
+        required: bool = False,
+        allow_space_empty: bool = False,
     ) -> str:
         """获取用户输入"""
         while True:
             try:
                 if default:
-                    user_input = input(f"{prompt}[{default}] ").strip()
-                    if not user_input:
+                    raw_input = input(f"{prompt}[{default}] ")
+                    if raw_input.strip() == "":
+                        if allow_space_empty and raw_input != "":
+                            return ""
                         return default
+                    user_input = raw_input.strip()
                 else:
-                    user_input = input(prompt).strip()
+                    raw_input = input(prompt)
+                    if allow_space_empty and raw_input != "" and raw_input.strip() == "":
+                        return ""
+                    user_input = raw_input.strip()
 
                 if required and not user_input:
                     print("此项为必填项，请重新输入")

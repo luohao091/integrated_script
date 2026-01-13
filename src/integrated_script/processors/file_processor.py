@@ -917,7 +917,10 @@ class FileProcessor(BaseProcessor):
             for index, mapping in enumerate(temp_mappings):
                 try:
                     # 生成最终文件名
-                    final_name = f"{prefix}_{index+1:0{digits}d}"
+                    if prefix:
+                        final_name = f"{prefix}_{index+1:0{digits}d}"
+                    else:
+                        final_name = f"{index+1:0{digits}d}"
                     final_img_name = f"{final_name}{mapping['img_ext']}"
                     final_label_name = f"{final_name}.txt"
 
