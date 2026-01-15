@@ -24,6 +24,8 @@ from ..core.progress import process_with_progress, progress_context
 from ..core.utils import (
     copy_file_safe,
     create_directory,
+    cv2_imread_unicode,
+    cv2_imwrite_unicode,
     delete_file_safe,
     get_file_list,
     move_file_safe,
@@ -1292,8 +1294,6 @@ class YOLOProcessor(DatasetProcessor):
             images_dir: 图像目录
         """
         try:
-            import cv2
-
             # 只处理jpg文件
             jpg_files = [f for f in images_dir.iterdir() if f.suffix.lower() == ".jpg"]
 
@@ -1305,9 +1305,9 @@ class YOLOProcessor(DatasetProcessor):
             with progress_context(len(jpg_files), "重新保存图像") as progress:
                 for img_file in jpg_files:
                     try:
-                        img = cv2.imread(str(img_file))
+                        img = cv2_imread_unicode(img_file)
                         if img is not None:
-                            cv2.imwrite(str(img_file), img)
+                            cv2_imwrite_unicode(img_file, img)
                         else:
                             self.logger.warning(f"无法读取图像文件: {img_file}")
                     except Exception as e:

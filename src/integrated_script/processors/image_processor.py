@@ -44,6 +44,8 @@ from ..core.base import BaseProcessor
 from ..core.progress import process_with_progress, progress_context
 from ..core.utils import (
     create_directory,
+    cv2_imread_unicode,
+    cv2_imwrite_unicode,
     format_file_size,
     get_file_list,
     get_unique_filename,
@@ -697,7 +699,7 @@ class ImageProcessor(BaseProcessor):
         """使用OpenCV转换图像"""
         try:
             # 读取图像
-            img = cv2.imread(str(input_file))
+            img = cv2_imread_unicode(input_file)
             if img is None:
                 raise FileProcessingError(f"无法读取图像: {input_file}")
 
@@ -713,7 +715,7 @@ class ImageProcessor(BaseProcessor):
                 save_params = [cv2.IMWRITE_WEBP_QUALITY, quality]
 
             # 保存图像
-            success = cv2.imwrite(str(output_file), img, save_params)
+            success = cv2_imwrite_unicode(output_file, img, save_params)
             if not success:
                 raise FileProcessingError(f"保存图像失败: {output_file}")
 
@@ -780,7 +782,7 @@ class ImageProcessor(BaseProcessor):
         """使用OpenCV调整图像尺寸"""
         try:
             # 读取图像
-            img = cv2.imread(str(input_file))
+            img = cv2_imread_unicode(input_file)
             if img is None:
                 raise FileProcessingError(f"无法读取图像: {input_file}")
 
@@ -801,7 +803,7 @@ class ImageProcessor(BaseProcessor):
             )
 
             # 保存图像
-            success = cv2.imwrite(str(output_file), resized_img)
+            success = cv2_imwrite_unicode(output_file, resized_img)
             if not success:
                 raise FileProcessingError(f"保存图像失败: {output_file}")
 
@@ -830,7 +832,7 @@ class ImageProcessor(BaseProcessor):
 
         if CV2_AVAILABLE:
             try:
-                img = cv2.imread(str(image_file))
+                img = cv2_imread_unicode(image_file)
                 if img is not None:
                     h, w = img.shape[:2]
                     return (w, h)
@@ -1594,7 +1596,7 @@ class ImageProcessor(BaseProcessor):
         img = None
         try:
             # 读取图像
-            img = cv2.imread(str(input_file))
+            img = cv2_imread_unicode(input_file)
             if img is None:
                 raise FileProcessingError(f"无法读取图像: {input_file}")
 
@@ -1628,7 +1630,7 @@ class ImageProcessor(BaseProcessor):
                 save_params = [cv2.IMWRITE_WEBP_QUALITY, quality]
 
             # 立即保存图像
-            success = cv2.imwrite(str(output_file), img, save_params)
+            success = cv2_imwrite_unicode(output_file, img, save_params)
             if not success:
                 raise FileProcessingError(f"保存图像失败: {output_file}")
 
@@ -1860,7 +1862,7 @@ def _compress_with_cv2_worker(
     img = None
     try:
         # 读取图像
-        img = cv2.imread(str(input_file))
+        img = cv2_imread_unicode(input_file)
         if img is None:
             raise Exception(f"无法读取图像文件: {input_file}")
 
@@ -1891,7 +1893,7 @@ def _compress_with_cv2_worker(
             encode_params = []
 
         # 保存图像
-        success = cv2.imwrite(str(output_file), img, encode_params)
+        success = cv2_imwrite_unicode(output_file, img, encode_params)
         if not success:
             raise Exception(f"保存图像失败: {output_file}")
 
@@ -2085,7 +2087,7 @@ def _process_batch_worker(
 
                     try:
                         # 读取图像
-                        img = cv2.imread(str(img_file), cv2.IMREAD_COLOR)
+                        img = cv2_imread_unicode(img_file, cv2.IMREAD_COLOR)
                         if img is None:
                             raise Exception(f"无法读取图像: {img_file}")
 
@@ -2121,7 +2123,7 @@ def _process_batch_worker(
                             encode_params = []
 
                         # 保存图像
-                        success = cv2.imwrite(str(output_file), img, encode_params)
+                        success = cv2_imwrite_unicode(output_file, img, encode_params)
                         if not success:
                             raise Exception(f"保存图像失败: {output_file}")
 
@@ -2235,7 +2237,7 @@ def _process_batch_worker(
         img = None
         try:
             # 读取图像
-            img = cv2.imread(str(input_file))
+            img = cv2_imread_unicode(input_file)
             if img is None:
                 raise Exception(f"无法读取图像文件: {input_file}")
 
@@ -2266,7 +2268,7 @@ def _process_batch_worker(
                 encode_params = []
 
             # 保存图像
-            success = cv2.imwrite(str(output_file), img, encode_params)
+            success = cv2_imwrite_unicode(output_file, img, encode_params)
             if not success:
                 raise Exception(f"保存图像失败: {output_file}")
 
@@ -2390,7 +2392,7 @@ def _process_batch_worker(
 
                     try:
                         # 读取图像
-                        img = cv2.imread(str(img_file), cv2.IMREAD_COLOR)
+                        img = cv2_imread_unicode(img_file, cv2.IMREAD_COLOR)
                         if img is None:
                             raise Exception(f"无法读取图像: {img_file}")
 
@@ -2426,7 +2428,7 @@ def _process_batch_worker(
                             encode_params = []
 
                         # 保存图像
-                        success = cv2.imwrite(str(output_file), img, encode_params)
+                        success = cv2_imwrite_unicode(output_file, img, encode_params)
                         if not success:
                             raise Exception(f"保存图像失败: {output_file}")
 

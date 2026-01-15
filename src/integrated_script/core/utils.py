@@ -174,6 +174,57 @@ def get_file_list(
         )
 
 
+def cv2_imread_unicode(
+    image_path: Union[str, Path], flags: Optional[int] = None
+) -> Any:
+    """使用OpenCV读取图像（兼容包含中文的路径）"""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        raise
+
+    path_obj = Path(image_path)
+    try:
+        raw = path_obj.read_bytes()
+    except Exception as exc:
+        logger.warning("读取图像字节失败: %s", exc)
+        return None
+
+    array = np.frombuffer(raw, dtype=np.uint8)
+    if flags is None:
+        flags = cv2.IMREAD_COLOR
+    image = cv2.imdecode(array, flags)
+    return image
+
+
+def cv2_imwrite_unicode(
+    image_path: Union[str, Path], image: Any, params: Optional[List[int]] = None
+) -> bool:
+    """使用OpenCV写入图像（兼容包含中文的路径）"""
+    try:
+        import cv2
+    except ImportError:
+        raise
+
+    path_obj = Path(image_path)
+    suffix = path_obj.suffix or ".png"
+    if not suffix.startswith("."):
+        suffix = f".{suffix}"
+
+    encode_params = params or []
+    success, encoded = cv2.imencode(suffix, image, encode_params)
+    if not success:
+        return False
+
+    try:
+        path_obj.write_bytes(encoded.tobytes())
+        return True
+    except Exception as exc:
+        logger.warning("写入图像字节失败: %s", exc)
+        return False
+
+
 @safe_file_operation("创建目录")
 def create_directory(
     path: Union[str, Path], parents: bool = True, exist_ok: bool = True
