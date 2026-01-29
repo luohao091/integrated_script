@@ -1198,11 +1198,24 @@ class YOLOProcessor(DatasetProcessor):
             final_output_dir = input_dir.parent / final_project_name
 
             if output_dir != final_output_dir:
+                target_dir = final_output_dir
+                if target_dir.exists():
+                    suffix = 1
+                    while True:
+                        candidate = Path(f"{final_output_dir}-{suffix}")
+                        if not candidate.exists():
+                            target_dir = candidate
+                            break
+                        suffix += 1
+                    self.logger.warning(
+                        f"目标目录已存在，使用新名称: {target_dir.name}"
+                    )
+
                 try:
-                    output_dir.rename(final_output_dir)
-                    result["output_path"] = str(final_output_dir)
-                    result["project_name"] = final_project_name
-                    self.logger.info(f"项目文件夹已重命名为: {final_project_name}")
+                    output_dir.rename(target_dir)
+                    result["output_path"] = str(target_dir)
+                    result["project_name"] = target_dir.name
+                    self.logger.info(f"项目文件夹已重命名为: {target_dir.name}")
                 except Exception as e:
                     self.logger.error(f"重命名项目文件夹失败: {str(e)}")
                     hard_error = True
