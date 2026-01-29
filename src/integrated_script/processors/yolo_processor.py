@@ -8,6 +8,7 @@ YOLO数据集处理器
 提供YOLO数据集的验证、清理、转换等功能。
 """
 
+import json
 import os
 import random
 import re
@@ -470,7 +471,10 @@ class YOLOProcessor(DatasetProcessor):
             )
 
     def process_ctds_dataset(
-        self, input_path: str, output_name: str = None
+        self,
+        input_path: str,
+        output_name: str = None,
+        keep_empty_labels: bool = False,
     ) -> Dict[str, Any]:
         """CTDS数据转YOLO格式
 
@@ -525,6 +529,7 @@ class YOLOProcessor(DatasetProcessor):
                     "pre_detection_result": pre_detection_result,
                     "obj_names_path": str(obj_names_path),
                     "obj_train_data_path": str(obj_train_data_path),
+                    "keep_empty_labels": keep_empty_labels,
                 }
             else:
                 self.logger.warning("预检测失败，将使用默认检测类型进行处理")
@@ -538,6 +543,7 @@ class YOLOProcessor(DatasetProcessor):
                 obj_train_data_path,
                 confirmed_type,
                 pre_detection_result,
+                keep_empty_labels,
             )
 
         except Exception as e:
@@ -547,8 +553,403 @@ class YOLOProcessor(DatasetProcessor):
                 dataset_path=str(input_dir) if "input_dir" in locals() else input_path,
             )
 
+    def detect_xlabel_classes(self, source_dir: str) -> Set[str]:
+        """扫描X-label/Labelme JSON中的类别名称"""
+        source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
+        classes: Set[str] = set()
+
+        for root, dirs, files in os.walk(source_path):
+            root_path = Path(root)
+            if root_path.name.endswith("_dataset"):
+                dirs[:] = []
+                continue
+
+            for filename in files:
+                if not filename.lower().endswith(".json"):
+                    continue
+                json_path = root_path / filename
+                try:
+                    with json_path.open("r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    for shape in data.get("shapes", []):
+                        label = shape.get("label")
+                        if label:
+                            classes.add(label)
+                except Exception as e:
+                    self.logger.warning(f"读取JSON失败 {json_path}: {e}")
+
+        return classes
+
+    def detect_xlabel_segmentation_classes(self, source_dir: str) -> Set[str]:
+        """扫描X-label分割JSON中的类别名称（按脚本规则）"""
+        source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
+        classes: Set[str] = set()
+
+        def list_json_files(base_dir: Path) -> List[Path]:
+            jsons = [
+                p
+                for p in base_dir.iterdir()
+                if p.is_file() and p.suffix.lower() == ".json"
+            ]
+            if jsons:
+                return jsons
+
+            files: List[Path] = []
+            for subdir in base_dir.iterdir():
+                if not subdir.is_dir():
+                    continue
+                if subdir.name.endswith("_dataset"):
+                    continue
+                files.extend(
+                    p
+                    for p in subdir.iterdir()
+                    if p.is_file() and p.suffix.lower() == ".json"
+                )
+            return files
+
+        for json_path in list_json_files(source_path):
+            try:
+                with json_path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for shape in data.get("shapes", []):
+                    label = shape.get("label")
+                    if label:
+                        classes.add(label)
+            except Exception as e:
+                self.logger.warning(f"读取JSON失败 {json_path}: {e}")
+
+        return classes
+
+    def convert_xlabel_to_yolo(
+        self,
+        source_dir: str,
+        output_dir: Optional[str] = None,
+        class_order: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """X-label数据转YOLO格式（基于Labelme JSON）"""
+        source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
+
+        if output_dir:
+            output_path = Path(output_dir)
+        else:
+            name = source_path.name
+            output_path = source_path.parent / f"{name}_dataset"
+
+        create_directory(output_path)
+        images_dir = output_path / "images"
+        labels_dir = output_path / "labels"
+        create_directory(images_dir)
+        create_directory(labels_dir)
+
+        detected_classes = self.detect_xlabel_classes(str(source_path))
+        if not detected_classes:
+            raise DatasetError("未检测到任何类别", dataset_path=str(source_path))
+
+        if class_order:
+            if len(class_order) != len(set(class_order)):
+                raise DatasetError(
+                    "class_order包含重复类别", dataset_path=str(source_path)
+                )
+            if set(class_order) != detected_classes:
+                raise DatasetError(
+                    "class_order与检测到的类别不一致",
+                    dataset_path=str(source_path),
+                )
+            final_classes = class_order
+        else:
+            final_classes = sorted(detected_classes)
+        class_mapping = {name: idx for idx, name in enumerate(final_classes)}
+
+        json_files: List[Path] = []
+        for root, dirs, files in os.walk(source_path):
+            root_path = Path(root)
+            if root_path.name.endswith("_dataset"):
+                dirs[:] = []
+                continue
+            for filename in files:
+                if filename.lower().endswith(".json"):
+                    json_files.append(root_path / filename)
+
+        result = {
+            "success": True,
+            "input_path": str(source_path),
+            "output_path": str(output_path),
+            "classes": final_classes,
+            "class_mapping": class_mapping,
+            "statistics": {
+                "json_files": len(json_files),
+                "converted": 0,
+                "missing_images": 0,
+                "skipped": 0,
+                "errors": 0,
+            },
+        }
+
+        def polygon_to_bbox(
+            points: List[List[float]],
+        ) -> Tuple[float, float, float, float]:
+            xs = [p[0] for p in points]
+            ys = [p[1] for p in points]
+            return min(xs), min(ys), max(xs), max(ys)
+
+        def normalize_bbox(
+            xmin: float,
+            ymin: float,
+            xmax: float,
+            ymax: float,
+            img_w: int,
+            img_h: int,
+        ) -> Tuple[float, float, float, float]:
+            x_center = ((xmin + xmax) / 2) / img_w
+            y_center = ((ymin + ymax) / 2) / img_h
+            width = (xmax - xmin) / img_w
+            height = (ymax - ymin) / img_h
+
+            return (
+                max(0, min(1, x_center)),
+                max(0, min(1, y_center)),
+                max(0, min(1, width)),
+                max(0, min(1, height)),
+            )
+
+        with progress_context(len(json_files), "X-label转YOLO") as progress:
+            for json_path in json_files:
+                try:
+                    with json_path.open("r", encoding="utf-8") as f:
+                        data = json.load(f)
+
+                    img_w = data.get("imageWidth")
+                    img_h = data.get("imageHeight")
+                    if not img_w or not img_h:
+                        raise ValueError("缺少 imageWidth/imageHeight")
+
+                    base_name = json_path.stem
+                    img_path: Optional[Path] = None
+                    for ext in self.image_extensions:
+                        candidate = json_path.with_name(base_name + ext)
+                        if candidate.exists():
+                            img_path = candidate
+                            break
+
+                    if not img_path:
+                        result["statistics"]["missing_images"] += 1
+                        result["statistics"]["skipped"] += 1
+                        self.logger.warning(f"未找到图片: {json_path}")
+                        continue
+
+                    copy_file_safe(img_path, images_dir / img_path.name)
+
+                    label_file = labels_dir / f"{base_name}{self.label_extension}"
+                    with label_file.open("w", encoding="utf-8") as f:
+                        for shape in data.get("shapes", []):
+                            label = shape.get("label")
+                            if label not in class_mapping:
+                                continue
+
+                            points = shape.get("points", [])
+                            if len(points) < 2:
+                                continue
+
+                            xmin, ymin, xmax, ymax = polygon_to_bbox(points)
+                            x, y, w, h = normalize_bbox(
+                                xmin, ymin, xmax, ymax, img_w, img_h
+                            )
+
+                            class_id = class_mapping[label]
+                            f.write(
+                                f"{class_id} {x:.6f} {y:.6f} {w:.6f} {h:.6f}\n"
+                            )
+
+                    result["statistics"]["converted"] += 1
+                except Exception as e:
+                    result["statistics"]["errors"] += 1
+                    result["success"] = False
+                    self.logger.error(f"处理失败 {json_path}: {e}")
+                finally:
+                    progress.update_progress(1)
+
+        classes_path = output_path / self.classes_file
+        with classes_path.open("w", encoding="utf-8") as f:
+            for cls in final_classes:
+                f.write(f"{cls}\n")
+
+        return result
+
+    def convert_xlabel_to_yolo_segmentation(
+        self,
+        source_dir: str,
+        output_dir: Optional[str] = None,
+        class_order: Optional[List[str]] = None,
+        english_name_mapping: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """X-label数据转YOLO分割格式（基于Labelme JSON）"""
+        source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
+
+        if output_dir:
+            output_path = Path(output_dir)
+        else:
+            name = source_path.name
+            output_path = source_path.parent / f"{name}_dataset"
+
+        create_directory(output_path)
+        images_dir = output_path / "images"
+        labels_dir = output_path / "labels"
+        create_directory(images_dir)
+        create_directory(labels_dir)
+
+        def list_json_files(base_dir: Path) -> List[Path]:
+            jsons = [
+                p
+                for p in base_dir.iterdir()
+                if p.is_file() and p.suffix.lower() == ".json"
+            ]
+            if jsons:
+                return jsons
+
+            files: List[Path] = []
+            for subdir in base_dir.iterdir():
+                if not subdir.is_dir():
+                    continue
+                if subdir.name.endswith("_dataset"):
+                    continue
+                files.extend(
+                    p
+                    for p in subdir.iterdir()
+                    if p.is_file() and p.suffix.lower() == ".json"
+                )
+            return files
+
+        json_files = list_json_files(source_path)
+        detected_classes: Set[str] = set()
+        for json_path in json_files:
+            try:
+                with json_path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for shape in data.get("shapes", []):
+                    label = shape.get("label")
+                    if label:
+                        detected_classes.add(label)
+            except Exception as e:
+                self.logger.warning(f"读取JSON失败 {json_path}: {e}")
+
+        if not detected_classes:
+            raise DatasetError("未检测到任何类别", dataset_path=str(source_path))
+
+        if class_order:
+            if len(class_order) != len(set(class_order)):
+                raise DatasetError(
+                    "class_order包含重复类别", dataset_path=str(source_path)
+                )
+            if set(class_order) != detected_classes:
+                raise DatasetError(
+                    "class_order与检测到的类别不一致",
+                    dataset_path=str(source_path),
+                )
+            final_classes = class_order
+        else:
+            final_classes = sorted(detected_classes)
+        class_mapping = {name: idx for idx, name in enumerate(final_classes)}
+
+        result = {
+            "success": True,
+            "input_path": str(source_path),
+            "output_path": str(output_path),
+            "classes": final_classes,
+            "class_mapping": class_mapping,
+            "statistics": {
+                "json_files": len(json_files),
+                "converted": 0,
+                "missing_images": 0,
+                "skipped": 0,
+                "errors": 0,
+            },
+        }
+
+        def normalize_polygon(
+            points: List[List[float]], img_w: int, img_h: int
+        ) -> List[float]:
+            normalized: List[float] = []
+            for point in points:
+                x, y = point
+                x = max(0, min(1, x / img_w))
+                y = max(0, min(1, y / img_h))
+                normalized.extend([x, y])
+            return normalized
+
+        with progress_context(len(json_files), "X-label转YOLO-分割") as progress:
+            for json_path in json_files:
+                try:
+                    with json_path.open("r", encoding="utf-8") as f:
+                        data = json.load(f)
+
+                    img_w = data.get("imageWidth")
+                    img_h = data.get("imageHeight")
+                    if not img_w or not img_h:
+                        raise ValueError("缺少 imageWidth/imageHeight")
+
+                    image_path = data.get("imagePath")
+                    if not image_path:
+                        raise ValueError("缺少 imagePath")
+                    base_name = Path(image_path).stem
+                    img_path: Optional[Path] = None
+                    for ext in self.image_extensions:
+                        candidate = json_path.with_name(base_name + ext)
+                        if candidate.exists():
+                            img_path = candidate
+                            break
+
+                    if not img_path:
+                        result["statistics"]["missing_images"] += 1
+                        result["statistics"]["skipped"] += 1
+                        self.logger.warning(f"未找到图片: {json_path}")
+                        continue
+
+                    copy_file_safe(img_path, images_dir / img_path.name)
+
+                    label_file = labels_dir / f"{base_name}{self.label_extension}"
+                    with label_file.open("w", encoding="utf-8") as f:
+                        for shape in data.get("shapes", []):
+                            label = shape.get("label")
+                            if label not in class_mapping:
+                                continue
+
+                            points = shape.get("points", [])
+                            if len(points) < 3:
+                                continue
+
+                            coords = normalize_polygon(points, img_w, img_h)
+                            if not coords:
+                                continue
+
+                            class_id = class_mapping[label]
+                            coords_str = " ".join(f"{v:.6f}" for v in coords)
+                            f.write(f"{class_id} {coords_str}\n")
+
+                    result["statistics"]["converted"] += 1
+                except Exception as e:
+                    result["statistics"]["errors"] += 1
+                    result["success"] = False
+                    self.logger.error(f"处理失败 {json_path}: {e}")
+                finally:
+                    progress.update_progress(1)
+
+        classes_path = output_path / self.classes_file
+        with classes_path.open("w", encoding="utf-8") as f:
+            for cls in final_classes:
+                english_name = (
+                    english_name_mapping.get(cls, cls)
+                    if english_name_mapping
+                    else cls
+                )
+                f.write(f"{english_name}\n")
+
+        return result
+
     def continue_ctds_processing(
-        self, pre_result: Dict[str, Any], confirmed_type: str
+        self,
+        pre_result: Dict[str, Any],
+        confirmed_type: str,
+        keep_empty_labels: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """继续CTDS数据处理（在用户确认数据集类型后）
 
@@ -573,6 +974,9 @@ class YOLOProcessor(DatasetProcessor):
                 obj_train_data_path,
                 confirmed_type,
                 pre_detection_result,
+                pre_result.get("keep_empty_labels", False)
+                if keep_empty_labels is None
+                else keep_empty_labels,
             )
 
         except Exception as e:
@@ -589,6 +993,7 @@ class YOLOProcessor(DatasetProcessor):
         obj_train_data_path: Path,
         confirmed_type: str,
         pre_detection_result: Dict[str, Any],
+        keep_empty_labels: bool = False,
     ) -> Dict[str, Any]:
         """执行CTDS数据处理的核心逻辑
 
@@ -626,6 +1031,9 @@ class YOLOProcessor(DatasetProcessor):
                     "total_processed": 0,
                     "invalid_removed": 0,
                     "final_count": 0,
+                    "empty_removed": 0,
+                    "missing_images": 0,
+                    "missing_labels": 0,
                 },
             }
 
@@ -636,17 +1044,32 @@ class YOLOProcessor(DatasetProcessor):
                 for f in all_files
                 if f.suffix.lower() == ".txt" and f.name.lower() != "train.txt"
             ]
+            img_files = [
+                f
+                for f in all_files
+                if f.suffix.lower() in {ext.lower() for ext in self.image_extensions}
+            ]
+            img_by_stem = {f.stem: f for f in img_files}
 
             self.logger.info(f"找到 {len(txt_files)} 个标签文件")
+            self.logger.info(f"找到 {len(img_files)} 个图像文件")
             self.logger.info(f"使用确认的数据集类型进行验证: {confirmed_type}")
 
             # 处理标签文件和对应的图像
             count = 1
             invalid_count = 0
+            matched_image_stems: Set[str] = set()
 
             with progress_context(len(txt_files), "处理CTDS数据") as progress:
                 for txt_file in txt_files:
                     try:
+                        if not keep_empty_labels and self._is_empty_label_file(txt_file):
+                            invalid_count += 1
+                            result["statistics"]["empty_removed"] += 1
+                            result["invalid_files"].append(str(txt_file))
+                            progress.update_progress(1)
+                            continue
+
                         # 检查标签文件是否有效（根据确认的数据集类型）
                         if self._contains_invalid_ctds_data(txt_file, confirmed_type):
                             invalid_count += 1
@@ -654,21 +1077,23 @@ class YOLOProcessor(DatasetProcessor):
                             progress.update_progress(1)
                             continue
 
-                        # 生成新的文件名
-                        new_txt_name = f"{project_name}-{count:05d}.txt"
-                        new_txt_path = labels_dir / new_txt_name
-
-                        # 移动标签文件
-                        move_file_safe(txt_file, new_txt_path)
-                        result["processed_files"]["labels"].append(str(new_txt_path))
-
                         # 查找对应的图像文件
                         base_name = txt_file.stem
-                        img_file = self._find_corresponding_ctds_image(
-                            base_name, obj_train_data_path
-                        )
+                        img_file = img_by_stem.get(base_name)
 
                         if img_file:
+                            matched_image_stems.add(base_name)
+
+                            # 生成新的文件名
+                            new_txt_name = f"{project_name}-{count:05d}.txt"
+                            new_txt_path = labels_dir / new_txt_name
+
+                            # 移动标签文件
+                            move_file_safe(txt_file, new_txt_path)
+                            result["processed_files"]["labels"].append(
+                                str(new_txt_path)
+                            )
+
                             # 保持原始扩展名
                             new_img_name = (
                                 f"{project_name}-{count:05d}{img_file.suffix}"
@@ -681,9 +1106,14 @@ class YOLOProcessor(DatasetProcessor):
                                 str(new_img_path)
                             )
                         else:
+                            invalid_count += 1
+                            result["statistics"]["missing_images"] += 1
+                            result["invalid_files"].append(str(txt_file))
                             self.logger.warning(
-                                f"未找到标签文件 {txt_file.name} 对应的图像文件"
+                                f"未找到标签文件 {txt_file.name} 对应的图像文件，已跳过"
                             )
+                            progress.update_progress(1)
+                            continue
 
                         count += 1
                         progress.update_progress(1)
@@ -699,10 +1129,25 @@ class YOLOProcessor(DatasetProcessor):
             result["statistics"]["invalid_removed"] = invalid_count
             result["statistics"]["final_count"] = valid_files
 
+            unmatched_images = [
+                f for f in img_files if f.stem not in matched_image_stems
+            ]
+            result["statistics"]["missing_labels"] = len(unmatched_images)
+            if unmatched_images:
+                result["invalid_files"].extend(str(f) for f in unmatched_images)
+
             # 输出处理统计信息
             self.logger.info(
                 f"CTDS数据处理完成 - 总文件数: {total_files}, 有效文件: {valid_files}, 无效文件: {invalid_count}"
             )
+            if result["statistics"]["missing_images"] > 0:
+                self.logger.warning(
+                    f"未找到图像的标签文件数: {result['statistics']['missing_images']}"
+                )
+            if result["statistics"]["missing_labels"] > 0:
+                self.logger.warning(
+                    f"未找到标签的图像文件数: {result['statistics']['missing_labels']}"
+                )
 
             # 使用OpenCV重新保存图像（如果可用）
             try:
@@ -883,6 +1328,18 @@ class YOLOProcessor(DatasetProcessor):
         except Exception as e:
             self.logger.error(f"检查标签文件失败 {label_file}: {str(e)}")
             return True
+
+    def _is_empty_label_file(self, label_file: Path) -> bool:
+        """判断标签文件是否为空（或仅包含空行）"""
+        try:
+            with open(label_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        return False
+            return True
+        except Exception as e:
+            self.logger.error(f"检查空标签失败 {label_file}: {str(e)}")
+            return False
 
     def detect_dataset_type(self, dataset_path: str) -> Dict[str, Any]:
         """自动检测数据集类型（检测还是分割）
