@@ -9,6 +9,7 @@ cli.py
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -150,6 +151,41 @@ class CLIInterface:
         ctds_parser.add_argument("dataset_path", help="CTDS数据集路径")
         ctds_parser.add_argument(
             "--project-name", help="处理后的项目名称（为空时自动生成）"
+        )
+        ctds_parser.add_argument(
+            "--keep-empty-labels",
+            action="store_true",
+            help="保留空标签文件（默认不保留）",
+        )
+
+        # X-label数据处理
+        xlabel_parser = yolo_subparsers.add_parser(
+            "process-xlabel", help="X-label数据转YOLO格式"
+        )
+        xlabel_parser.add_argument("dataset_path", help="X-label数据集路径")
+        xlabel_parser.add_argument(
+            "--output-path", help="输出目录（为空时自动生成）"
+        )
+        xlabel_parser.add_argument(
+            "--class-order",
+            help="类别顺序，使用逗号分隔，例如: dam,bridge,spillway",
+        )
+
+        # X-label分割数据处理
+        xlabel_seg_parser = yolo_subparsers.add_parser(
+            "process-xlabel-seg", help="X-label数据转YOLO-分割格式"
+        )
+        xlabel_seg_parser.add_argument("dataset_path", help="X-label数据集路径")
+        xlabel_seg_parser.add_argument(
+            "--output-path", help="输出目录（为空时自动生成）"
+        )
+        xlabel_seg_parser.add_argument(
+            "--class-order",
+            help="类别顺序，使用逗号分隔，例如: dam,bridge,spillway",
+        )
+        xlabel_seg_parser.add_argument(
+            "--class-map",
+            help="类别英文映射JSON文件（键为中文/原始名称，值为英文名称）",
         )
 
     def _add_image_commands(self, subparsers):
@@ -463,7 +499,46 @@ class CLIInterface:
 
             elif args.yolo_action == "process-ctds":
                 result = processor.process_ctds_dataset(
-                    args.dataset_path, output_name=getattr(args, "project_name", None)
+                    args.dataset_path,
+                    output_name=getattr(args, "project_name", None),
+                    keep_empty_labels=getattr(args, "keep_empty_labels", False),
+                )
+                self._print_result(result)
+
+            elif args.yolo_action == "process-xlabel":
+                class_order = None
+                if getattr(args, "class_order", None):
+                    class_order = [
+                        name.strip()
+                        for name in args.class_order.split(",")
+                        if name.strip()
+                    ]
+                result = processor.convert_xlabel_to_yolo(
+                    args.dataset_path,
+                    output_dir=getattr(args, "output_path", None),
+                    class_order=class_order,
+                )
+                self._print_result(result)
+
+            elif args.yolo_action == "process-xlabel-seg":
+                class_order = None
+                if getattr(args, "class_order", None):
+                    class_order = [
+                        name.strip()
+                        for name in args.class_order.split(",")
+                        if name.strip()
+                    ]
+                english_name_mapping = None
+                if getattr(args, "class_map", None):
+                    with open(args.class_map, "r", encoding="utf-8") as f:
+                        english_name_mapping = json.load(f)
+                    if not isinstance(english_name_mapping, dict):
+                        raise ValueError("class-map必须为JSON对象")
+                result = processor.convert_xlabel_to_yolo_segmentation(
+                    args.dataset_path,
+                    output_dir=getattr(args, "output_path", None),
+                    class_order=class_order,
+                    english_name_mapping=english_name_mapping,
                 )
                 self._print_result(result)
 

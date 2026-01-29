@@ -120,6 +120,8 @@ class InteractiveInterface:
             "title": "YOLO数据集处理",
             "options": [
                 ("CTDS数据转YOLO格式", self._yolo_process_ctds),
+                ("X-label数据转YOLO格式", self._yolo_process_xlabel),
+                ("X-label数据转YOLO-分割格式", self._yolo_process_xlabel_segmentation),
                 ("YOLO数据转CTDS格式", self._yolo_convert_to_ctds),
                 ("目标检测数据集验证", self._yolo_detection_statistics),
                 ("目标分割数据集验证", self._yolo_segmentation_statistics),
@@ -154,6 +156,10 @@ class InteractiveInterface:
             if not project_name:
                 project_name = None
 
+            keep_empty_labels = self._get_yes_no_input(
+                "\n是否保留空标签文件? (y/N): ", default=False
+            )
+
             processor = self._get_processor("yolo")
 
             print("\n正在处理CTDS数据集...")
@@ -163,7 +169,9 @@ class InteractiveInterface:
 
             # 第一阶段：预检测和获取项目名称
             result = processor.process_ctds_dataset(
-                str(dataset_path_obj), output_name=project_name
+                str(dataset_path_obj),
+                output_name=project_name,
+                keep_empty_labels=keep_empty_labels,
             )
 
             # 检查是否是预检测阶段
@@ -197,7 +205,9 @@ class InteractiveInterface:
                 )
 
                 # 第二阶段：继续处理
-                result = processor.continue_ctds_processing(result, confirmed_type)
+                result = processor.continue_ctds_processing(
+                    result, confirmed_type, keep_empty_labels=keep_empty_labels
+                )
 
             # 显示处理结果
             self._display_ctds_result(result)
@@ -208,6 +218,98 @@ class InteractiveInterface:
 
         except Exception as e:
             print(f"\nCTDS数据转YOLO格式失败: {e}")
+
+        self._pause()
+
+    def _yolo_process_xlabel(self) -> None:
+        """X-label数据转YOLO格式"""
+        try:
+            print("\n=== X-label数据转YOLO格式 ===")
+            print("此功能将Labelme/X-label JSON转换为YOLO目标检测格式：")
+            print("- 自动扫描类别")
+            print("- 支持用户调整类别顺序（class_id）")
+            print("- 生成images/labels目录与classes.txt")
+
+            dataset_path = self._get_path_input(
+                "请输入X-label数据集路径: ", must_exist=True
+            )
+            output_path = self._get_input(
+                "请输入输出目录（留空自动生成）: ", required=False
+            ).strip()
+            if not output_path:
+                output_path = None
+
+            processor = self._get_processor("yolo")
+
+            classes = processor.detect_xlabel_classes(dataset_path)
+            if not classes:
+                print("\n❌ 未检测到任何类别")
+                self._pause()
+                return
+
+            final_classes = self._get_class_order_from_user(list(classes))
+
+            print("\n✅ 最终类别与ID映射：")
+            for i, c in enumerate(final_classes):
+                print(f"  {i}: {c}")
+
+            print("\n正在转换X-label数据集...")
+            result = processor.convert_xlabel_to_yolo(
+                dataset_path, output_dir=output_path, class_order=final_classes
+            )
+
+            self._display_result(result)
+
+        except Exception as e:
+            print(f"\nX-label数据转YOLO失败: {e}")
+
+        self._pause()
+
+    def _yolo_process_xlabel_segmentation(self) -> None:
+        """X-label数据转YOLO-分割格式"""
+        try:
+            print("\n=== X-label数据转YOLO-分割格式 ===")
+            print("此功能将Labelme/X-label JSON转换为YOLO分割格式：")
+            print("- 自动扫描类别")
+            print("- 支持用户调整类别顺序（class_id）")
+            print("- 生成images/labels目录与classes.txt")
+
+            dataset_path = self._get_path_input(
+                "请输入X-label数据集路径: ", must_exist=True
+            )
+            output_path = self._get_input(
+                "请输入输出目录（留空自动生成）: ", required=False
+            ).strip()
+            if not output_path:
+                output_path = None
+
+            processor = self._get_processor("yolo")
+
+            classes = processor.detect_xlabel_segmentation_classes(dataset_path)
+            if not classes:
+                print("\n❌ 未检测到任何类别")
+                self._pause()
+                return
+
+            english_mapping = self._get_english_name_mapping(list(classes))
+            final_classes = self._get_class_order_from_user(list(classes))
+
+            print("\n✅ 最终类别与ID映射：")
+            for i, c in enumerate(final_classes):
+                print(f"  {i}: {c}")
+
+            print("\n正在转换X-label分割数据集...")
+            result = processor.convert_xlabel_to_yolo_segmentation(
+                dataset_path,
+                output_dir=output_path,
+                class_order=final_classes,
+                english_name_mapping=english_mapping,
+            )
+
+            self._display_result(result)
+
+        except Exception as e:
+            print(f"\nX-label转YOLO-分割失败: {e}")
 
         self._pause()
 
@@ -415,6 +517,44 @@ class InteractiveInterface:
                     return "segmentation"
                 else:
                     return None
+
+    def _get_class_order_from_user(self, classes: List[str]) -> List[str]:
+        """获取用户确认的类别顺序（class_id）"""
+        default = sorted(classes)
+
+        print("\n📌 检测到以下类别（当前顺序 = class_id）：")
+        for i, c in enumerate(default):
+            print(f"  {i}: {c}")
+
+        print("\n如需修改顺序，请输入新的编号顺序，例如：")
+        print("  2 1 0")
+        print("直接回车表示使用当前顺序")
+
+        user_input = self._get_input("新的顺序 -> ", required=False).strip()
+        if not user_input:
+            return default
+
+        try:
+            idxs = list(map(int, user_input.split()))
+            if len(idxs) != len(default):
+                raise ValueError("数量不一致")
+            if set(idxs) != set(range(len(default))):
+                raise ValueError("编号不合法")
+            return [default[i] for i in idxs]
+        except Exception as e:
+            print(f"❌ 输入非法（{e}），使用默认顺序")
+            return default
+
+    def _get_english_name_mapping(self, classes: List[str]) -> Dict[str, str]:
+        """获取类别英文名称映射"""
+        mapping: Dict[str, str] = {}
+        print("\n检测到以下类别，请为每个类别输入对应的英文名称：")
+        for class_name in sorted(classes):
+            english_name = self._get_input(
+                f"请输入 '{class_name}' 的英文名称: ", required=False
+            ).strip()
+            mapping[class_name] = english_name or class_name
+        return mapping
 
     def _display_validation_result(
         self, result: Dict[str, Any], dataset_type_name: str
@@ -2733,7 +2873,7 @@ class InteractiveInterface:
                 ("翻转标签坐标", self._label_flip),
                 ("过滤标签类别", self._label_filter),
                 ("删除空标签", self._label_remove_empty),
-                ("删除指定类别标签", self._label_remove_class),
+                ("删除只包含指定类别标签", self._label_remove_class),
                 ("返回主菜单", None),
             ],
         }
