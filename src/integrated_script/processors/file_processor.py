@@ -348,6 +348,95 @@ class FileProcessor(BaseProcessor):
         except Exception as e:
             raise ProcessingError(f"文件移动失败: {str(e)}")
 
+    def move_images_by_count(
+        self,
+        source_dir: str,
+        target_dir: str,
+        count: int,
+        overwrite: bool = False,
+    ) -> Dict[str, Any]:
+        """按顺序移动指定数量的图片
+
+        规则:
+        - 源目录仅图片: 按文件名顺序移动
+        - 源目录含子目录: 先处理源目录下图片，再按子目录名称顺序处理子目录图片
+        """
+        try:
+            if count <= 0:
+                raise ValueError("数量必须为正整数")
+
+            source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
+            target_path = validate_path(target_dir, must_exist=False)
+            create_directory(target_path)
+
+            image_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+
+            root_images = sorted(
+                [
+                    p
+                    for p in source_path.iterdir()
+                    if p.is_file() and p.suffix.lower() in image_exts
+                ],
+                key=lambda p: p.name.lower(),
+            )
+            subdirs = sorted(
+                [p for p in source_path.iterdir() if p.is_dir()],
+                key=lambda p: p.name.lower(),
+            )
+
+            ordered_images: List[Path] = []
+            ordered_images.extend(root_images)
+            for subdir in subdirs:
+                sub_images = sorted(
+                    [
+                        p
+                        for p in subdir.iterdir()
+                        if p.is_file() and p.suffix.lower() in image_exts
+                    ],
+                    key=lambda p: p.name.lower(),
+                )
+                ordered_images.extend(sub_images)
+
+            result = {
+                "success": True,
+                "source_dir": str(source_path),
+                "target_dir": str(target_path),
+                "moved_files": [],
+                "failed_files": [],
+                "statistics": {
+                    "total_candidates": len(ordered_images),
+                    "requested_count": count,
+                    "moved_count": 0,
+                    "failed_count": 0,
+                },
+            }
+
+            moved = 0
+            for image_path in ordered_images:
+                if moved >= count:
+                    break
+                try:
+                    target_file = target_path / image_path.name
+                    if target_file.exists() and not overwrite:
+                        target_file = get_unique_filename(
+                            target_file.parent, target_file.name
+                        )
+
+                    move_file_safe(image_path, target_file)
+                    result["moved_files"].append(str(target_file))
+                    moved += 1
+                except Exception as e:
+                    result["failed_files"].append(
+                        {"source_file": str(image_path), "error": str(e)}
+                    )
+                    result["statistics"]["failed_count"] += 1
+
+            result["statistics"]["moved_count"] = moved
+            return result
+
+        except Exception as e:
+            raise ProcessingError(f"按数量移动图片失败: {str(e)}")
+
     def delete_files(
         self,
         target_dir: str,

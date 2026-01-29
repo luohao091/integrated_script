@@ -2251,6 +2251,7 @@ class InteractiveInterface:
                 ("递归删除JSON文件", self._file_delete_json_recursive),
                 ("批量复制文件", self._file_copy),
                 ("批量移动文件", self._file_move),
+                ("按数量移动图片", self._file_move_images_by_count),
                 ("返回主菜单", None),
             ],
         }
@@ -2332,6 +2333,45 @@ class InteractiveInterface:
 
             print("\n正在移动文件...")
             result = processor.move_files(source_path, dest_path, recursive=recursive)
+
+            self._display_result(result)
+
+        except UserInterruptError:
+            print(f"\n移动失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n按回车键继续...")
+            input()
+        except Exception as e:
+            print(f"\n移动失败: {e}")
+
+        self._pause()
+
+    def _file_move_images_by_count(self) -> None:
+        """按数量移动图片"""
+        try:
+            print("\n=== 按数量移动图片 ===")
+            print("规则: 先处理源目录下图片，再按子目录名称顺序处理子目录内图片")
+
+            source_path = self._get_path_input(
+                "请输入源目录: ", must_exist=True, must_be_dir=True
+            )
+            dest_path = self._get_path_input("请输入目标目录: ", must_exist=False)
+
+            count_str = self._get_input("请输入要移动的图片数量: ", required=True)
+            try:
+                count = int(count_str)
+            except ValueError:
+                print("数量必须为整数")
+                self._pause()
+                return
+
+            overwrite = self._get_yes_no_input("目标存在同名文件时覆盖? (y/n): ")
+
+            processor = self._get_processor("file")
+
+            print("\n正在移动图片...")
+            result = processor.move_images_by_count(
+                source_path, dest_path, count=count, overwrite=overwrite
+            )
 
             self._display_result(result)
 
