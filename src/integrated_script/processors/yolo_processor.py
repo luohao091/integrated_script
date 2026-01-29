@@ -1316,6 +1316,11 @@ class YOLOProcessor(DatasetProcessor):
                                 f"文件 {label_file} 检测数据格式错误，需要至少5列: {line}"
                             )
                             return True
+                        if len(data) != 5:
+                            self.logger.debug(
+                                f"文件 {label_file} 检测数据列数应为5: {line}"
+                            )
+                            return True
 
                         # 只验证前4个坐标值
                         coord_values = data[1:5]
