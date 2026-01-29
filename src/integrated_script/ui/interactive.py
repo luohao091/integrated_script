@@ -330,6 +330,9 @@ class InteractiveInterface:
             print(f"  - 总处理文件数: {stats.get('total_processed', 0)}")
             print(f"  - 有效文件数: {stats.get('final_count', 0)}")
             print(f"  - 无效文件数: {stats.get('invalid_removed', 0)}")
+            if "missing_images" in stats or "missing_labels" in stats:
+                print(f"  - 标签缺图数: {stats.get('missing_images', 0)}")
+                print(f"  - 图片缺标数: {stats.get('missing_labels', 0)}")
         else:
             print("❌ 处理失败")
             if "error" in result:
@@ -495,28 +498,25 @@ class InteractiveInterface:
                 return None
         else:
             # 高置信度，询问是否确认
-            confirm = (
-                input(
-                    f"\n确认数据集类型为 {self._get_dataset_type_display_name(detected_type)} 吗？(Y/n): "
-                )
-                .strip()
-                .lower()
+            confirm = self._get_yes_no_input(
+                f"\n确认数据集类型为 {self._get_dataset_type_display_name(detected_type)} 吗？",
+                default=True,
             )
-            if confirm in ["", "y", "yes"]:
+            if confirm:
                 return detected_type
-            else:
-                print("\n请手动选择数据集类型:")
-                print("1. 目标检测数据集")
-                print("2. 目标分割数据集")
-                print("3. 取消处理")
 
-                choice = input("\n请选择 (1-3): ").strip()
-                if choice == "1":
-                    return "detection"
-                elif choice == "2":
-                    return "segmentation"
-                else:
-                    return None
+            print("\n请手动选择数据集类型:")
+            print("1. 目标检测数据集")
+            print("2. 目标分割数据集")
+            print("3. 取消处理")
+
+            choice = input("\n请选择 (1-3): ").strip()
+            if choice == "1":
+                return "detection"
+            elif choice == "2":
+                return "segmentation"
+            else:
+                return None
 
     def _get_class_order_from_user(self, classes: List[str]) -> List[str]:
         """获取用户确认的类别顺序（class_id）"""

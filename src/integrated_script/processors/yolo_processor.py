@@ -108,6 +108,8 @@ class YOLOProcessor(DatasetProcessor):
                     "deleted_images": 0,
                 },
             }
+            hard_error = False
+            hard_error = False
 
             # 检查每个标签文件
             zero_only_files = []
@@ -1027,6 +1029,12 @@ class YOLOProcessor(DatasetProcessor):
                 "confirmed_type": confirmed_type,
                 "processed_files": {"images": [], "labels": [], "classes_file": None},
                 "invalid_files": [],
+                "invalid_details": {
+                    "empty_labels": [],
+                    "invalid_labels": [],
+                    "missing_images": [],
+                    "missing_labels": [],
+                },
                 "statistics": {
                     "total_processed": 0,
                     "invalid_removed": 0,
@@ -1036,6 +1044,7 @@ class YOLOProcessor(DatasetProcessor):
                     "missing_labels": 0,
                 },
             }
+            hard_error = False
 
             # 获取所有标签文件（排除train.txt）
             all_files = list(obj_train_data_path.iterdir())
@@ -1044,6 +1053,7 @@ class YOLOProcessor(DatasetProcessor):
                 for f in all_files
                 if f.suffix.lower() == ".txt" and f.name.lower() != "train.txt"
             ]
+            label_stems = {f.stem for f in txt_files}
             img_files = [
                 f
                 for f in all_files
@@ -1058,7 +1068,6 @@ class YOLOProcessor(DatasetProcessor):
             # 处理标签文件和对应的图像
             count = 1
             invalid_count = 0
-            matched_image_stems: Set[str] = set()
 
             with progress_context(len(txt_files), "处理CTDS数据") as progress:
                 for txt_file in txt_files:
@@ -1067,6 +1076,9 @@ class YOLOProcessor(DatasetProcessor):
                             invalid_count += 1
                             result["statistics"]["empty_removed"] += 1
                             result["invalid_files"].append(str(txt_file))
+                            result["invalid_details"]["empty_labels"].append(
+                                str(txt_file)
+                            )
                             progress.update_progress(1)
                             continue
 
@@ -1074,6 +1086,9 @@ class YOLOProcessor(DatasetProcessor):
                         if self._contains_invalid_ctds_data(txt_file, confirmed_type):
                             invalid_count += 1
                             result["invalid_files"].append(str(txt_file))
+                            result["invalid_details"]["invalid_labels"].append(
+                                str(txt_file)
+                            )
                             progress.update_progress(1)
                             continue
 
@@ -1082,7 +1097,6 @@ class YOLOProcessor(DatasetProcessor):
                         img_file = img_by_stem.get(base_name)
 
                         if img_file:
-                            matched_image_stems.add(base_name)
 
                             # 生成新的文件名
                             new_txt_name = f"{project_name}-{count:05d}.txt"
@@ -1109,6 +1123,9 @@ class YOLOProcessor(DatasetProcessor):
                             invalid_count += 1
                             result["statistics"]["missing_images"] += 1
                             result["invalid_files"].append(str(txt_file))
+                            result["invalid_details"]["missing_images"].append(
+                                str(txt_file)
+                            )
                             self.logger.warning(
                                 f"未找到标签文件 {txt_file.name} 对应的图像文件，已跳过"
                             )
@@ -1120,7 +1137,7 @@ class YOLOProcessor(DatasetProcessor):
 
                     except Exception as e:
                         self.logger.error(f"处理文件失败 {txt_file}: {str(e)}")
-                        result["success"] = False
+                        hard_error = True
 
             # 更新统计信息
             total_files = len(txt_files)
@@ -1130,11 +1147,14 @@ class YOLOProcessor(DatasetProcessor):
             result["statistics"]["final_count"] = valid_files
 
             unmatched_images = [
-                f for f in img_files if f.stem not in matched_image_stems
+                f for f in img_files if f.stem not in label_stems
             ]
             result["statistics"]["missing_labels"] = len(unmatched_images)
             if unmatched_images:
                 result["invalid_files"].extend(str(f) for f in unmatched_images)
+                result["invalid_details"]["missing_labels"].extend(
+                    str(f) for f in unmatched_images
+                )
 
             # 输出处理统计信息
             self.logger.info(
@@ -1148,6 +1168,7 @@ class YOLOProcessor(DatasetProcessor):
                 self.logger.warning(
                     f"未找到标签的图像文件数: {result['statistics']['missing_labels']}"
                 )
+
 
             # 使用OpenCV重新保存图像（如果可用）
             try:
@@ -1169,7 +1190,7 @@ class YOLOProcessor(DatasetProcessor):
                 )
             except Exception as e:
                 self.logger.error(f"复制classes文件失败: {str(e)}")
-                result["success"] = False
+                hard_error = True
 
             # 重命名项目文件夹，包含文件数
             final_count = count - 1
@@ -1184,7 +1205,7 @@ class YOLOProcessor(DatasetProcessor):
                     self.logger.info(f"项目文件夹已重命名为: {final_project_name}")
                 except Exception as e:
                     self.logger.error(f"重命名项目文件夹失败: {str(e)}")
-                    result["success"] = False
+                    hard_error = True
 
             # 更新统计信息
             result["statistics"]["total_processed"] = len(txt_files)
@@ -1196,6 +1217,7 @@ class YOLOProcessor(DatasetProcessor):
             result["detection_confidence"] = pre_detection_result.get("confidence", 1.0)
             result["dataset_type_detection"] = pre_detection_result
 
+            result["success"] = not hard_error
             return result
 
         except Exception as e:
