@@ -411,6 +411,9 @@ class FileProcessor(BaseProcessor):
                 },
             }
 
+            if count == 9999:
+                count = len(ordered_images)
+
             moved = 0
             for image_path in ordered_images:
                 if moved >= count:

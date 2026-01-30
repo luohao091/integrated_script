@@ -2350,6 +2350,7 @@ class InteractiveInterface:
         try:
             print("\n=== 按数量移动图片 ===")
             print("规则: 先处理源目录下图片，再按子目录名称顺序处理子目录内图片")
+            print("提示: 输入 9999 表示移动全部图片")
 
             source_path = self._get_path_input(
                 "请输入源目录: ", must_exist=True, must_be_dir=True
