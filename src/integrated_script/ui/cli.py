@@ -12,7 +12,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.exceptions import ConfigurationError, ProcessingError
 from ..config.settings import ConfigManager
@@ -775,7 +775,7 @@ class CLIInterface:
             self.logger.error(f"标签操作失败: {e}")
             return 1
 
-    def _parse_size(self, size_str: str) -> tuple[int, int]:
+    def _parse_size(self, size_str: str) -> Tuple[int, int]:
         """解析尺寸字符串"""
         if "x" in size_str.lower():
             parts = size_str.lower().split("x")
