@@ -104,25 +104,37 @@ jobs:
           "其他": [],
         }
 
+        type_re = re.compile(r"^(?P<type>\\w+)(?:\\((?P<scope>[^)]+)\\))?:\\s*(?P<msg>.+)$")
+
         for ln in lines:
           subject, sha = ln.rsplit("|", 1)
           subject = subject.strip()
           sha = sha.strip()
           lower = subject.lower()
-          if lower.startswith("feat"):
-            categories["新增"].append((subject, sha))
-          elif lower.startswith("fix"):
-            categories["修复"].append((subject, sha))
-          elif lower.startswith("docs"):
-            categories["文档"].append((subject, sha))
-          elif lower.startswith("ci"):
-            categories["CI/构建"].append((subject, sha))
-          elif lower.startswith("refactor"):
-            categories["重构"].append((subject, sha))
-          elif lower.startswith("test"):
-            categories["测试"].append((subject, sha))
+          m = type_re.match(subject)
+          if m:
+            msg = m.group("msg").strip()
+            scope = (m.group("scope") or "").strip()
+            display = f"{msg} ({scope})" if scope else msg
+            t = m.group("type").lower()
           else:
-            categories["其他"].append((subject, sha))
+            display = subject
+            t = lower.split(":", 1)[0]
+
+          if t.startswith("feat"):
+            categories["新增"].append((display, sha))
+          elif t.startswith("fix"):
+            categories["修复"].append((display, sha))
+          elif t.startswith("docs"):
+            categories["文档"].append((display, sha))
+          elif t.startswith("ci"):
+            categories["CI/构建"].append((display, sha))
+          elif t.startswith("refactor"):
+            categories["重构"].append((display, sha))
+          elif t.startswith("test"):
+            categories["测试"].append((display, sha))
+          else:
+            categories["其他"].append((display, sha))
 
         def format_section(title: str, items: list[tuple[str, str]]) -> str:
           if not items:
