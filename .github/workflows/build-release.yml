@@ -25,8 +25,10 @@ jobs:
             out_name: integrated_script-${{ github.ref_name }}-windows-amd64.exe
           - name: linux-amd64
             runner: ubuntu-latest
-            setup_python: true
-            python_cmd: python
+            setup_python: false
+            use_container: true
+            container_image: quay.io/pypa/manylinux_2_28_x86_64
+            docker_cmd: docker
             exe_name: integrated_script
             out_name: integrated_script-${{ github.ref_name }}-linux-amd64
           - name: linux-arm64
@@ -35,7 +37,9 @@ jobs:
               - Linux
               - ARM64
             setup_python: false
-            python_cmd: /home/luohao/.pyenv/versions/3.11.9/bin/python
+            use_container: true
+            container_image: quay.io/pypa/manylinux_2_28_aarch64
+            docker_cmd: sudo docker
             exe_name: integrated_script
             out_name: integrated_script-${{ github.ref_name }}-linux-arm64
 
@@ -49,57 +53,27 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Detect Python version (self-hosted)
-      if: ${{ matrix.setup_python == false }}
+    - name: Build (container)
+      if: ${{ matrix.use_container == true }}
       shell: bash
       run: |
-        ${{ matrix.python_cmd }} -c "import sys; print(f'PYTHON_VERSION={sys.version_info.major}.{sys.version_info.minor}')" >> "$GITHUB_ENV"
+        mkdir -p .pip-cache
+        ${{ matrix.docker_cmd }} run --rm \
+          -v "$PWD:/work" \
+          -v "$PWD/.pip-cache:/root/.cache/pip" \
+          -w /work \
+          ${{ matrix.container_image }} \
+          bash -lc "/opt/python/cp311-cp311/bin/python -m pip install -U pip && \
+                    /opt/python/cp311-cp311/bin/python -m pip install -r requirements.txt pyinstaller && \
+                    /opt/python/cp311-cp311/bin/python build_exe.py"
 
-    - name: Cache pip (self-hosted)
-      if: ${{ matrix.setup_python == false }}
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-        key: ${{ runner.os }}-${{ runner.arch }}-py${{ env.PYTHON_VERSION }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-py${{ env.PYTHON_VERSION }}-pip-
-
-    - name: Cache venv (self-hosted)
-      if: ${{ matrix.setup_python == false }}
-      uses: actions/cache@v4
-      with:
-        path: .venv
-        key: ${{ runner.os }}-${{ runner.arch }}-py${{ env.PYTHON_VERSION }}-venv-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-py${{ env.PYTHON_VERSION }}-venv-
-
-    - name: Prepare Python runtime
+    - name: Build (hosted)
+      if: ${{ matrix.use_container != true }}
       shell: bash
       run: |
-        if [[ "${{ matrix.setup_python }}" == "true" ]]; then
-          echo "PYTHON_CMD=${{ matrix.python_cmd }}" >> "$GITHUB_ENV"
-        else
-          if [[ ! -x ".venv/bin/python" ]]; then
-            ${{ matrix.python_cmd }} -m venv .venv
-          fi
-          echo "PYTHON_CMD=$PWD/.venv/bin/python" >> "$GITHUB_ENV"
-        fi
-
-    - name: Install dependencies
-      shell: bash
-      run: |
-        PYTHONPATH= PYTHONNOUSERSITE=1 $PYTHON_CMD -m pip install --upgrade pip
-        PYTHONPATH= PYTHONNOUSERSITE=1 $PYTHON_CMD -m pip install -r requirements.txt pyinstaller
-
-    - name: Verify Python runtime
-      shell: bash
-      run: |
-        PYTHONPATH= PYTHONNOUSERSITE=1 $PYTHON_CMD --version
-
-    - name: Build executable
-      shell: bash
-      run: PYTHONPATH= PYTHONNOUSERSITE=1 $PYTHON_CMD build_exe.py
+        python -m pip install -U pip
+        python -m pip install -r requirements.txt pyinstaller
+        python build_exe.py
 
     - name: Rename executable with release tag
       env:
