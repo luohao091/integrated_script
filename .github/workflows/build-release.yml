@@ -49,12 +49,14 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Detect Python version
+    - name: Detect Python version (self-hosted)
+      if: ${{ matrix.setup_python == false }}
       shell: bash
       run: |
         ${{ matrix.python_cmd }} -c "import sys; print(f'PYTHON_VERSION={sys.version_info.major}.{sys.version_info.minor}')" >> "$GITHUB_ENV"
 
-    - name: Cache pip
+    - name: Cache pip (self-hosted)
+      if: ${{ matrix.setup_python == false }}
       uses: actions/cache@v4
       with:
         path: |
@@ -85,15 +87,18 @@ jobs:
         fi
 
     - name: Install dependencies
+      shell: bash
       run: |
         $PYTHON_CMD -m pip install --upgrade pip
         $PYTHON_CMD -m pip install -r requirements.txt pyinstaller
 
     - name: Verify Python runtime
+      shell: bash
       run: |
         $PYTHON_CMD --version
 
     - name: Build executable
+      shell: bash
       run: $PYTHON_CMD build_exe.py
 
     - name: Rename executable with release tag
