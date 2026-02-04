@@ -61,7 +61,12 @@ jobs:
         repo = os.environ.get("REPO", "").strip()
 
         def run(*args: str) -> str:
-          return subprocess.check_output(list(args), text=True).strip()
+          return subprocess.check_output(
+            list(args),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+          ).strip()
 
         tags = run("git", "tag", "--sort=-version:refname").splitlines()
         prev = None
