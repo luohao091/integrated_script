@@ -55,7 +55,7 @@ jobs:
         import os
         import re
         import subprocess
-        from datetime import datetime
+        from datetime import datetime, timedelta
 
         tag = os.environ.get("TAG", "").strip()
         repo = os.environ.get("REPO", "").strip()
@@ -150,7 +150,8 @@ jobs:
         if not any(categories.values()):
           body.append("本次没有可展示的提交记录。")
           body.append("")
-        body.append(f"_生成时间：{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}_")
+        utc8 = datetime.utcnow().replace(microsecond=0) + timedelta(hours=8)
+        body.append(f"_生成时间：{utc8.strftime('%Y-%m-%d %H:%M')} 北京时间_")
         body.append("")
 
         with open("release_body.md", "w", encoding="utf-8") as f:
