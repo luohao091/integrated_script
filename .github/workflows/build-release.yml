@@ -58,14 +58,46 @@ jobs:
       shell: bash
       run: |
         mkdir -p .pip-cache
+        mkdir -p .py311
+        if [[ "${{ matrix.docker_cmd }}" == "sudo docker" ]]; then
+          sudo chown -R 0:0 .pip-cache .py311 || true
+        else
+          chown -R 0:0 .pip-cache .py311 || true
+        fi
         ${{ matrix.docker_cmd }} run --rm \
           -v "$PWD:/work" \
           -v "$PWD/.pip-cache:/root/.cache/pip" \
+          -v "$PWD/.py311:/work/.py311" \
           -w /work \
           ${{ matrix.container_image }} \
-          bash -lc "/opt/python/cp311-cp311/bin/python -m pip install -U pip && \
-                    /opt/python/cp311-cp311/bin/python -m pip install -r requirements.txt pyinstaller && \
-                    /opt/python/cp311-cp311/bin/python build_exe.py"
+          bash -lc "
+            set -euo pipefail
+            PY_PREFIX=/work/.py311
+            PY_BIN=\$PY_PREFIX/bin/python3.11
+            if [ ! -x \"\$PY_BIN\" ]; then
+              yum -y install \
+                gcc make openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel \
+                readline-devel sqlite-devel ncurses-devel gdbm-devel libuuid-devel
+              curl -fsSLO https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tgz
+              tar -xf Python-3.11.9.tgz
+              cd Python-3.11.9
+              ./configure --enable-optimizations --enable-shared --prefix=\$PY_PREFIX
+              make -j\$(nproc)
+              make install
+              cd /work
+            fi
+            export LD_LIBRARY_PATH=\$PY_PREFIX/lib:\$LD_LIBRARY_PATH
+            \$PY_BIN -m pip install -U pip
+            \$PY_BIN -m pip install -r requirements.txt pyinstaller
+            \$PY_BIN build_exe.py
+          "
+
+    - name: Cache Python build (container)
+      if: ${{ matrix.use_container == true }}
+      uses: actions/cache@v4
+      with:
+        path: .py311
+        key: ${{ runner.os }}-${{ runner.arch }}-py311-shared-${{ matrix.name }}
 
     - name: Build (hosted)
       if: ${{ matrix.use_container != true }}
