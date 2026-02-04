@@ -233,11 +233,11 @@ jobs:
         def format_section(title: str, items: list[tuple[str, str]]) -> str:
           if not items:
             return ""
-          lines = [f"## {title}"]
+          lines = [f"## {title}", ""]
           for subject, sha in items:
             lines.append(f"- {subject} ({sha})")
           lines.append("")
-          return "\\n".join(lines)
+          return "\n".join(lines)
 
         body = []
         body.append(f"# {tag}")
@@ -246,7 +246,9 @@ jobs:
           body.append(f"对比范围：{prev} → {tag}")
           if repo:
             body.append(
-              f"完整对比：[{prev}...{tag}](https://github.com/{repo}/compare/{prev}...{tag})"
+              f"完整对比：[[{prev}...{tag}]"
+              f"(https://github.com/{repo}/compare/{prev}...{tag})]"
+              f"(https://github.com/{repo}/compare/{prev}...{tag})"
             )
         else:
           body.append("对比范围：初始发布")
@@ -259,7 +261,7 @@ jobs:
           body.append("本次没有可展示的提交记录。")
           body.append("")
         utc8 = datetime.utcnow().replace(microsecond=0) + timedelta(hours=8)
-        body.append(f"_生成时间：{utc8.strftime('%Y-%m-%d %H:%M')} 北京时间_")
+        body.append(f"生成时间：{utc8.strftime('%Y-%m-%d %H:%M')} 北京时间")
         body.append("")
 
         with open("release_body.md", "w", encoding="utf-8") as f:
