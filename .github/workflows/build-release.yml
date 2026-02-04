@@ -246,9 +246,7 @@ jobs:
           body.append(f"对比范围：{prev} → {tag}")
           if repo:
             body.append(
-              f"完整对比：[[{prev}...{tag}]"
-              f"(https://github.com/{repo}/compare/{prev}...{tag})]"
-              f"(https://github.com/{repo}/compare/{prev}...{tag})"
+              f"完整对比：https://github.com/{repo}/compare/{prev}...{tag}"
             )
         else:
           body.append("对比范围：初始发布")
