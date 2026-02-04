@@ -240,12 +240,14 @@ jobs:
           return "\\n".join(lines)
 
         body = []
-        body.append(f"# {tag}")
-        body.append("")
         if prev:
-          body.append(f"对比范围：{prev} → {tag}")
           if repo:
-            body.append(f"完整对比：https://github.com/{repo}/compare/{prev}...{tag}")
+            body.append(
+              f"对比范围：{prev} → {tag}（[查看对比]"
+              f"(https://github.com/{repo}/compare/{prev}...{tag})）"
+            )
+          else:
+            body.append(f"对比范围：{prev} → {tag}")
         else:
           body.append("对比范围：初始发布")
         body.append("")
