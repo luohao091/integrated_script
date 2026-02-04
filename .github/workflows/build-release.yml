@@ -70,17 +70,19 @@ jobs:
 
         prev = None
         if tag:
-          prev_proc = subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0", f"{tag}^"],
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            capture_output=True,
-          )
-          if prev_proc.returncode == 0:
-            prev = prev_proc.stdout.strip()
-            if not re.match(r"^v\\d+\\.\\d+\\.\\d+$", prev):
-              prev = None
+          tags = run(
+            "git",
+            "for-each-ref",
+            "--sort=version:refname",
+            "--format=%(refname:short)",
+            "refs/tags/v[0-9]*.[0-9]*.[0-9]*",
+          ).splitlines()
+          try:
+            idx = tags.index(tag)
+          except ValueError:
+            idx = -1
+          if idx > 0:
+            prev = tags[idx - 1]
 
         rev_range = f"{prev}..{tag}" if prev else tag
         raw = run(
