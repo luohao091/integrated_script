@@ -45,7 +45,7 @@ jobs:
         fetch-depth: 0
 
     - uses: actions/setup-python@v5
-      if: ${{ matrix.setup_python }}
+      if: ${{ matrix.setup_python == true }}
       with:
         python-version: '3.11'
 
