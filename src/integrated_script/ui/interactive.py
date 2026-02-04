@@ -120,9 +120,9 @@ class InteractiveInterface:
             "title": "YOLO数据集处理",
             "options": [
                 ("CTDS数据转YOLO格式", self._yolo_process_ctds),
-                ("X-label数据转YOLO格式", self._yolo_process_xlabel),
-                ("X-label数据转YOLO-分割格式", self._yolo_process_xlabel_segmentation),
                 ("YOLO数据转CTDS格式", self._yolo_convert_to_ctds),
+                ("X-label数据转YOLO-检测格式", self._yolo_process_xlabel),
+                ("X-label数据转YOLO-分割格式", self._yolo_process_xlabel_segmentation),
                 ("目标检测数据集验证", self._yolo_detection_statistics),
                 ("目标分割数据集验证", self._yolo_segmentation_statistics),
                 ("清理不匹配文件", self._yolo_clean_unmatched),
