@@ -63,11 +63,15 @@ jobs:
       if: ${{ matrix.use_container == true }}
       shell: bash
       run: |
-        mkdir -p .pip-cache
+        mkdir -p .pip-cache .pyuser
         ${{ matrix.docker_cmd }} run --rm \
           -u "$(id -u):$(id -g)" \
           -v "$PWD:/work" \
-          -v "$PWD/.pip-cache:/root/.cache/pip" \
+          -v "$PWD/.pip-cache:/work/.pip-cache" \
+          -v "$PWD/.pyuser:/work/.pyuser" \
+          -e HOME=/work \
+          -e PIP_CACHE_DIR=/work/.pip-cache \
+          -e PYTHONUSERBASE=/work/.pyuser \
           -w /work \
           ${{ matrix.container_image }} \
           bash -lc "
