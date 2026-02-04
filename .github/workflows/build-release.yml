@@ -35,7 +35,7 @@ jobs:
               - Linux
               - ARM64
             setup_python: false
-            python_cmd: python3
+            python_cmd: /home/luohao/.pyenv/versions/3.11.9/bin/python
             exe_name: integrated_script
             out_name: integrated_script-${{ github.ref_name }}-linux-arm64
 
