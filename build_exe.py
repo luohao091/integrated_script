@@ -80,11 +80,16 @@ def build_exe():
     else:
         print("Notice: UPX not found, build will omit binary compression.")
 
+    clean_enabled = os.environ.get("PYINSTALLER_CLEAN", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+    }
+
     cmd_parts = [
         sys.executable,
         "-m",
         "PyInstaller",
-        "--clean",
         "--noconfirm",
         "--onefile",
         "--console",
@@ -95,6 +100,8 @@ def build_exe():
         "--workpath",
         str(project_root / "build"),
     ]
+    if clean_enabled:
+        cmd_parts.append("--clean")
     cmd_parts += upx_args
 
     cmd_parts += ["--paths", str(project_root / "src")]

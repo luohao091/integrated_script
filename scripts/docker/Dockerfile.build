@@ -1,0 +1,21 @@
+FROM registry.access.redhat.com/ubi8/python-39
+
+# Some UBI Python images don't ship microdnf; try common package managers, otherwise skip.
+USER root
+RUN if command -v microdnf >/dev/null 2>&1; then \
+      microdnf install -y gcc gcc-c++ make mesa-libGL && microdnf clean all; \
+    elif command -v dnf >/dev/null 2>&1; then \
+      dnf install -y gcc gcc-c++ make mesa-libGL && dnf clean all; \
+    elif command -v yum >/dev/null 2>&1; then \
+      yum install -y gcc gcc-c++ make mesa-libGL && yum clean all; \
+    else \
+      echo "No package manager found, skipping system deps install."; \
+    fi
+USER 1001
+
+WORKDIR /work
+
+COPY requirements.txt /tmp/requirements.txt
+
+RUN python -m pip install -U pip \
+    && python -m pip install -r /tmp/requirements.txt pyinstaller

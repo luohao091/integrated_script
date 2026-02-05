@@ -29,9 +29,10 @@ jobs:
             setup_python: false
             checkout_clean: true
             use_container: true
-            container_image: registry.access.redhat.com/ubi8/python-39
+            container_image: ghcr.io/luohao091/integrated_script-build:py39
             container_python: /usr/bin/python3.9
             docker_cmd: docker
+            install_deps: false
             exe_name: integrated_script
             out_name: integrated_script-${{ github.ref_name }}-linux-amd64
           - name: linux-arm64
@@ -42,9 +43,10 @@ jobs:
             setup_python: false
             checkout_clean: false
             use_container: true
-            container_image: registry.access.redhat.com/ubi8/python-39
+            container_image: ghcr.io/luohao091/integrated_script-build:py39
             container_python: /usr/bin/python3.9
             docker_cmd: sudo docker
+            install_deps: false
             exe_name: integrated_script
             out_name: integrated_script-${{ github.ref_name }}-linux-arm64
 
@@ -63,22 +65,26 @@ jobs:
       if: ${{ matrix.use_container == true }}
       shell: bash
       run: |
-        mkdir -p .pip-cache .pyuser
+        mkdir -p cache/pip cache/pyuser
         ${{ matrix.docker_cmd }} run --rm \
           -u "$(id -u):$(id -g)" \
           -v "$PWD:/work" \
-          -v "$PWD/.pip-cache:/work/.pip-cache" \
-          -v "$PWD/.pyuser:/work/.pyuser" \
+          -v "$PWD/cache/pip:/work/.pip-cache" \
+          -v "$PWD/cache/pyuser:/work/.pyuser" \
           -e HOME=/work \
           -e PIP_CACHE_DIR=/work/.pip-cache \
           -e PYTHONUSERBASE=/work/.pyuser \
+          -e PYINSTALLER_CLEAN=0 \
           -w /work \
           ${{ matrix.container_image }} \
           bash -lc "
             set -euo pipefail
             PY_BIN=${{ matrix.container_python }}
-            \$PY_BIN -m pip install -U pip
-            \$PY_BIN -m pip install -r requirements.txt pyinstaller
+            export PATH=\"/work/.pyuser/bin:\$PATH\"
+            if [ \"${{ matrix.install_deps }}\" = \"true\" ]; then
+              \$PY_BIN -m pip install -U pip
+              \$PY_BIN -m pip install -r requirements.txt pyinstaller
+            fi
             \$PY_BIN build_exe.py
           "
 
