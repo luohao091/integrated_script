@@ -10,7 +10,6 @@ Windows兼容性处理模块
 
 import os
 import sys
-from typing import Optional
 
 
 def setup_windows_console() -> bool:
@@ -83,7 +82,6 @@ def setup_console_encoding() -> bool:
             return True
         else:
             # Python 3.6及以下版本的兼容性处理
-            import codecs
             import io
 
             # 重新包装标准输出

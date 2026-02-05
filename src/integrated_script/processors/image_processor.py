@@ -11,7 +11,6 @@ image_processor.py
 import math
 import multiprocessing
 import os
-import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -33,7 +32,7 @@ except ImportError:
     CV2_AVAILABLE = False
 
 try:
-    from PIL import Image, ImageOps
+    from PIL import Image
 
     PIL_AVAILABLE = True
 except ImportError:
@@ -41,7 +40,7 @@ except ImportError:
 
 from ..config.exceptions import FileProcessingError, ProcessingError
 from ..core.base import BaseProcessor
-from ..core.progress import process_with_progress, progress_context
+from ..core.progress import process_with_progress
 from ..core.utils import (
     create_directory,
     cv2_imread_unicode,
@@ -554,7 +553,7 @@ class ImageProcessor(BaseProcessor):
 
         for idx, img_file in enumerate(iterator, start=1):
             try:
-                image = self._load_and_rewrite(img_file)
+                _ = self._load_and_rewrite(img_file)
                 repaired_files.append(str(img_file))
                 loaded_files.append(str(img_file))
                 continue
@@ -1329,7 +1328,6 @@ class ImageProcessor(BaseProcessor):
                 self.logger.info(f"已提交 {len(future_to_batch)} 个批次任务到进程池")
 
             # 启动进度监听线程
-            import queue
             import threading
 
             progress_thread_running = True
@@ -1346,7 +1344,7 @@ class ImageProcessor(BaseProcessor):
                         if progress_bar:
                             progress_bar.update(progress_update)
 
-                    except:
+                    except Exception:
                         # 队列为空或超时，继续循环
                         continue
 
@@ -1435,7 +1433,7 @@ class ImageProcessor(BaseProcessor):
                 progress_update = progress_queue.get_nowait()
                 if progress_bar:
                     progress_bar.update(progress_update)
-        except:
+        except Exception:
             pass
 
         # 关闭进度条
@@ -1576,12 +1574,12 @@ class ImageProcessor(BaseProcessor):
             if processed_img and processed_img != original_img:
                 try:
                     processed_img.close()
-                except:
+                except Exception:
                     pass
             if original_img:
                 try:
                     original_img.close()
-                except:
+                except Exception:
                     pass
 
     def _compress_with_cv2(
@@ -1959,7 +1957,7 @@ def _process_batch_worker(
 
     # 重新导入必要的模块（因为在新进程中）
     try:
-        from PIL import Image, ImageOps
+        from PIL import Image
 
         PIL_AVAILABLE = True
     except ImportError:
@@ -1994,177 +1992,6 @@ def _process_batch_worker(
             "space_saved": 0,
         },
     }
-
-    # 处理批次中的所有文件的内部函数
-    def compress_single_image_worker(img_file: Path) -> Dict[str, Any]:
-        """压缩单个图像的工作函数"""
-        try:
-            # 计算输入文件大小
-            input_size = img_file.stat().st_size
-
-            # 确定输出格式
-            output_format = target_format or img_file.suffix.lstrip(".").lower()
-            if output_format not in ["jpg", "jpeg", "png", "webp"]:
-                output_format = "jpg"  # 默认转为jpg以获得更好的压缩
-
-            # 生成输出文件路径
-            if recursive:
-                # 保持目录结构
-                rel_path = img_file.relative_to(input_path)
-                output_file = output_path / rel_path.with_suffix(f".{output_format}")
-                create_directory(output_file.parent)
-            else:
-                output_file = output_path / f"{img_file.stem}.{output_format}"
-
-            # 确保文件名唯一
-            output_file = get_unique_filename(output_file.parent, output_file.name)
-
-            # 压缩图像 - 直接在这里实现压缩逻辑
-            try:
-                if PIL_AVAILABLE:
-                    # 使用PIL压缩
-                    original_img = None
-                    processed_img = None
-
-                    try:
-                        # 打开图像
-                        original_img = Image.open(img_file)
-
-                        # 转换为RGB模式（如果需要）
-                        if output_format.lower() in [
-                            "jpg",
-                            "jpeg",
-                        ] and original_img.mode in ["RGBA", "LA"]:
-                            # 创建白色背景
-                            background = Image.new(
-                                "RGB", original_img.size, (255, 255, 255)
-                            )
-                            if original_img.mode == "RGBA":
-                                background.paste(
-                                    original_img, mask=original_img.split()[-1]
-                                )
-                            else:
-                                background.paste(original_img)
-                            processed_img = background
-                        else:
-                            processed_img = original_img.copy()
-
-                        # 调整尺寸（如果需要）
-                        if max_size:
-                            processed_img.thumbnail(max_size, Image.Resampling.LANCZOS)
-
-                        # 保存图像
-                        save_kwargs = {}
-                        if output_format.lower() in ["jpg", "jpeg"]:
-                            save_kwargs["quality"] = quality
-                            save_kwargs["optimize"] = True
-                        elif output_format.lower() == "png":
-                            save_kwargs["optimize"] = True
-                        elif output_format.lower() == "webp":
-                            save_kwargs["quality"] = quality
-                            save_kwargs["method"] = 6
-
-                        # 映射格式名称以符合PIL的要求
-                        pil_format = output_format.upper()
-                        if pil_format == "JPG":
-                            pil_format = "JPEG"
-
-                        processed_img.save(
-                            output_file, format=pil_format, **save_kwargs
-                        )
-
-                    finally:
-                        # 清理内存
-                        if original_img:
-                            original_img.close()
-                        if processed_img and processed_img != original_img:
-                            processed_img.close()
-                        gc.collect()
-
-                elif CV2_AVAILABLE:
-                    # 使用OpenCV压缩
-                    img = None
-
-                    try:
-                        # 读取图像
-                        img = cv2_imread_unicode(img_file, cv2.IMREAD_COLOR)
-                        if img is None:
-                            raise Exception(f"无法读取图像: {img_file}")
-
-                        # 调整尺寸（如果需要）
-                        if max_size:
-                            height, width = img.shape[:2]
-                            max_width, max_height = max_size
-
-                            # 计算缩放比例
-                            scale = min(max_width / width, max_height / height)
-                            if scale < 1:
-                                new_width = int(width * scale)
-                                new_height = int(height * scale)
-                                img = cv2.resize(
-                                    img,
-                                    (new_width, new_height),
-                                    interpolation=cv2.INTER_LANCZOS4,
-                                )
-
-                        # 设置压缩参数
-                        if output_format.lower() in ["jpg", "jpeg"]:
-                            encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
-                        elif output_format.lower() == "png":
-                            # PNG压缩级别 (0-9)
-                            compression_level = int((100 - quality) / 100 * 9)
-                            encode_params = [
-                                cv2.IMWRITE_PNG_COMPRESSION,
-                                compression_level,
-                            ]
-                        elif output_format.lower() == "webp":
-                            encode_params = [cv2.IMWRITE_WEBP_QUALITY, quality]
-                        else:
-                            encode_params = []
-
-                        # 保存图像
-                        success = cv2_imwrite_unicode(output_file, img, encode_params)
-                        if not success:
-                            raise Exception(f"保存图像失败: {output_file}")
-
-                    finally:
-                        # 清理内存
-                        if img is not None:
-                            del img
-                        gc.collect()
-
-                else:
-                    raise Exception("没有可用的图像处理库")
-
-            finally:
-                # 确保每张图片处理完后进行内存清理
-                gc.collect()
-
-            # 计算输出文件大小
-            output_size = output_file.stat().st_size
-            space_saved = input_size - output_size
-
-            return {
-                "success": True,
-                "input_file": str(img_file),
-                "output_file": str(output_file),
-                "input_size": input_size,
-                "output_size": output_size,
-                "space_saved": space_saved,
-                "compression_ratio": (
-                    output_size / input_size if input_size > 0 else 1.0
-                ),
-                "space_saved_percentage": (
-                    (space_saved / input_size * 100) if input_size > 0 else 0
-                ),
-            }
-
-        except Exception as e:
-            return {
-                "success": False,
-                "input_file": str(img_file),
-                "error": str(e),
-            }
 
     def _compress_with_pil_worker(
         input_file: Path,
@@ -2473,7 +2300,7 @@ def _process_batch_worker(
 
     # 处理批次中的所有文件
     processed_count = 0
-    total_files_in_batch = len(batch_files)
+    _ = len(batch_files)
 
     for img_file in batch_files:
         try:
@@ -2513,7 +2340,7 @@ def _process_batch_worker(
         if progress_queue is not None:
             try:
                 progress_queue.put(1)  # 报告处理了1个文件
-            except:
+            except Exception:
                 pass  # 忽略队列错误
 
         # 定期进行垃圾回收

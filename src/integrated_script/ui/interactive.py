@@ -11,9 +11,9 @@ interactive.py
 import os
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-from ..config.exceptions import ProcessingError, UserInterruptError, ValidationError
+from ..config.exceptions import UserInterruptError
 from ..config.settings import ConfigManager
 from ..core.logging_config import get_logger, setup_logging
 from ..processors import (
@@ -175,7 +175,7 @@ class InteractiveInterface:
                 detected_type = pre_detection["dataset_type"]
                 confidence = pre_detection["confidence"]
 
-                print(f"\n🔍 数据集类型预检测结果:")
+                print("\n🔍 数据集类型预检测结果:")
                 print(f"  类型: {self._get_dataset_type_display_name(detected_type)}")
                 print(f"  置信度: {confidence:.1%}")
 
@@ -209,7 +209,6 @@ class InteractiveInterface:
             # 如果处理成功且检测到数据集类型，询问是否进行验证
             # if result.get("success") and result.get("detected_dataset_type") != "unknown":
             #     self._handle_post_ctds_validation(result)
-
         except Exception as e:
             print(f"\nCTDS数据转YOLO格式失败: {e}")
 
@@ -253,7 +252,6 @@ class InteractiveInterface:
             )
 
             self._display_result(result)
-
         except Exception as e:
             print(f"\nX-label数据转YOLO失败: {e}")
 
@@ -301,7 +299,6 @@ class InteractiveInterface:
             )
 
             self._display_result(result)
-
         except Exception as e:
             print(f"\nX-label转YOLO-分割失败: {e}")
 
@@ -320,7 +317,7 @@ class InteractiveInterface:
 
             # 显示处理统计
             stats = result.get("statistics", {})
-            print(f"\n📊 处理统计:")
+            print("\n📊 处理统计:")
             print(f"  - 总处理文件数: {stats.get('total_processed', 0)}")
             print(f"  - 有效文件数: {stats.get('final_count', 0)}")
             print(f"  - 无效文件数: {stats.get('invalid_removed', 0)}")
@@ -339,20 +336,20 @@ class InteractiveInterface:
         output_path = result.get("output_path")
 
         # 显示数据集类型检测结果
-        print(f"\n🔍 数据集类型检测:")
+        print("\n🔍 数据集类型检测:")
         if detected_type == "detection":
             print(f"  📋 检测到: 目标检测数据集 (置信度: {confidence:.1%})")
             print(
-                f"  💡 说明: 标签文件使用5列格式 (class_id x_center y_center width height)"
+                "  💡 说明: 标签文件使用5列格式 (class_id x_center y_center width height)"
             )
         elif detected_type == "segmentation":
             print(f"  🎯 检测到: 目标分割数据集 (置信度: {confidence:.1%})")
-            print(f"  💡 说明: 标签文件使用多列格式 (class_id x1 y1 x2 y2 ...)")
+            print("  💡 说明: 标签文件使用多列格式 (class_id x1 y1 x2 y2 ...)")
         elif detected_type == "mixed":
             print(f"  ⚠️ 检测到: 混合格式数据集 (置信度: {confidence:.1%})")
-            print(f"  💡 说明: 数据集包含检测和分割两种格式")
+            print("  💡 说明: 数据集包含检测和分割两种格式")
         else:
-            print(f"  ❓ 未能确定数据集类型")
+            print("  ❓ 未能确定数据集类型")
 
         # 显示详细检测信息
         # 优先使用预检测结果，如果没有则使用处理过程中的检测结果
@@ -361,7 +358,7 @@ class InteractiveInterface:
         )
         if detection_info.get("success") and detection_info.get("statistics"):
             det_stats = detection_info["statistics"]
-            print(f"\n📈 检测详情:")
+            print("\n📈 检测详情:")
             print(
                 f"  - 分析文件数: {det_stats.get('files_analyzed', det_stats.get('total_files_analyzed', 0))}"
             )
@@ -373,14 +370,14 @@ class InteractiveInterface:
                 f"  - 分割格式文件数: {det_stats.get('segmentation_files', det_stats.get('segmentation_lines', 0))}"
             )
 
-        print(f"\n🎯 数据集类型确认")
+        print("\n🎯 数据集类型确认")
         print(
             f"检测结果: {self._get_dataset_type_display_name(detected_type)} (置信度: {confidence:.1%})"
         )
 
         # 让用户确认数据集类型
         if detected_type == "mixed" or confidence < 0.8:
-            print(f"\n⚠️ 检测置信度较低或为混合格式，请手动确认数据集类型:")
+            print("\n⚠️ 检测置信度较低或为混合格式，请手动确认数据集类型:")
             print("1. 目标检测数据集")
             print("2. 目标分割数据集")
             print("3. 跳过验证")
@@ -452,7 +449,6 @@ class InteractiveInterface:
 
             # 显示最终统计
             self._display_final_ctds_summary(result, validation_result, confirmed_type)
-
         except Exception as e:
             print(f"❌ 验证过程出错: {e}")
 
@@ -478,7 +474,7 @@ class InteractiveInterface:
         """
         # 如果是混合格式或置信度较低，让用户手动选择
         if detected_type == "mixed" or confidence < 0.8:
-            print(f"\n⚠️ 检测置信度较低或为混合格式，请手动确认数据集类型:")
+            print("\n⚠️ 检测置信度较低或为混合格式，请手动确认数据集类型:")
             print("1. 目标检测数据集")
             print("2. 目标分割数据集")
             print("3. 取消处理")
@@ -590,13 +586,13 @@ class InteractiveInterface:
 
         # CTDS处理统计
         ctds_stats = ctds_result.get("statistics", {})
-        print(f"\n📊 处理统计:")
+        print("\n📊 处理统计:")
         print(f"  ✅ 成功处理: {ctds_stats.get('final_count', 0)} 个文件对")
         print(f"  ❌ 剔除无效: {ctds_stats.get('invalid_removed', 0)} 个文件")
 
         # 验证统计
         val_stats = validation_result.get("statistics", {})
-        print(f"\n🔍 验证统计:")
+        print("\n🔍 验证统计:")
         print(f"  📷 图像文件: {val_stats.get('total_images', 0)} 个")
         print(f"  📝 标签文件: {val_stats.get('total_labels', 0)} 个")
         print(f"  🔗 匹配文件对: {val_stats.get('matched_pairs', 0)} 个")
@@ -616,7 +612,7 @@ class InteractiveInterface:
 
             if issues:
                 print(f"  ⚠️ 发现问题: {', '.join(issues)}")
-                print(f"  💡 建议: 使用'清理不匹配文件'功能进行清理")
+                print("  💡 建议: 使用'清理不匹配文件'功能进行清理")
 
     def _yolo_detection_statistics(self) -> None:
         """验证YOLO目标检测数据集"""
@@ -722,7 +718,6 @@ class InteractiveInterface:
                                 print("\n清理操作已取消")
                     else:
                         print("\n跳过自动清理")
-
         except Exception as e:
             print(f"\n目标检测数据集验证失败: {e}")
 
@@ -880,7 +875,6 @@ class InteractiveInterface:
         # 智能检测数据集根目录
         if dataset_path.name.lower() in ["images", "labels"]:
             dataset_path = dataset_path.parent
-
         labels_dir = dataset_path / "labels"
         if not labels_dir.exists():
             print(f"\n⚠ labels目录不存在: {labels_dir}")
@@ -926,7 +920,6 @@ class InteractiveInterface:
                             (label_file, f"第{line_num}行包含无效坐标值")
                         )
                         break
-
             except Exception as e:
                 invalid_files.append((label_file, f"读取文件失败: {e}"))
 
@@ -953,8 +946,6 @@ class InteractiveInterface:
         invalid_labels_dir.mkdir(exist_ok=True)
 
         images_dir = dataset_path / "images"
-        labels_dir = dataset_path / "labels"
-
         moved_count = 0
 
         print(f"\n正在移动无效文件到: {invalid_dir}")
@@ -967,7 +958,7 @@ class InteractiveInterface:
 
                 # 查找对应的图片文件并移动
                 label_stem = label_file.stem
-                image_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]
+                image_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".ti"]
 
                 for ext in image_extensions:
                     image_file = images_dir / f"{label_stem}{ext}"
@@ -978,7 +969,6 @@ class InteractiveInterface:
 
                 moved_count += 1
                 print(f"  移动: {label_file.name} ({reason})")
-
             except Exception as e:
                 print(f"  ❌ 移动失败 {label_file.name}: {e}")
 
@@ -988,7 +978,7 @@ class InteractiveInterface:
             try:
                 target_classes = invalid_dir / "classes.txt"
                 shutil.copy2(str(classes_file), str(target_classes))
-                print(f"  ✓ 已复制 classes.txt")
+                print("  ✓ 已复制 classes.txt")
             except Exception as e:
                 print(f"  ❌ 复制classes.txt失败: {e}")
 
@@ -996,7 +986,7 @@ class InteractiveInterface:
         print(f"  - 无效标签: {moved_count} 个")
         print(f"  - 对应图片: {moved_count} 个")
         if classes_file.exists():
-            print(f"  - 类别文件: 1 个")
+            print("  - 类别文件: 1 个")
 
     def _yolo_clean_unmatched(self) -> None:
         """清理YOLO数据集中不匹配的文件"""
@@ -1109,7 +1099,6 @@ class InteractiveInterface:
                     self._display_clean_result(result)
                 else:
                     print("\n操作已取消")
-
         except Exception as e:
             print(f"\n清理失败: {e}")
 
@@ -1147,7 +1136,7 @@ class InteractiveInterface:
                 label_files.extend(deleted_files[key])
 
         # 显示逻辑：图片和标签各最多5个，如果某一种不够则用另一种补齐
-        max_display = 10
+        _ = 10
         max_per_type = 5
 
         # 取前5个图片和前5个标签
@@ -1331,7 +1320,7 @@ class InteractiveInterface:
             if result["success"]:
                 print("\n✅ 数据集合并成功！")
                 print(f"输出目录: {result['output_path']}")
-                print(f"\n合并统计:")
+                print("\n合并统计:")
                 print(f"  - 总图片数: {result['total_images']}")
                 print(f"  - 总标签数: {result['total_labels']}")
                 print(f"  - 类别数: {len(result['classes'])}")
@@ -1340,7 +1329,7 @@ class InteractiveInterface:
                 if "statistics" in result:
                     stats = result["statistics"]
                     if "source_stats" in stats:
-                        print(f"\n各数据集统计:")
+                        print("\n各数据集统计:")
                         for source, source_stats in stats["source_stats"].items():
                             print(
                                 f"  {Path(source).name}: {source_stats['images']} 图片, {source_stats['labels']} 标签"
@@ -1490,7 +1479,7 @@ class InteractiveInterface:
             print("\n正在分析类别映射...")
             unified_classes, class_mappings = processor._create_unified_class_mapping(all_classes_info)
             
-            print(f"\n=== 统一类别映射预览 ===")
+            print("\n=== 统一类别映射预览 ===")
             print(f"合并后总类别数: {len(unified_classes)}")
             print(f"统一类别列表: {', '.join(unified_classes[:10])}")
             if len(unified_classes) > 10:
@@ -1533,7 +1522,7 @@ class InteractiveInterface:
                 print("图片前缀: 使用默认(img)")
 
             if dataset_order:
-                print(f"处理顺序: 自定义")
+                print("处理顺序: 自定义")
             else:
                 print("处理顺序: 默认")
 
@@ -1557,7 +1546,7 @@ class InteractiveInterface:
             if result["success"]:
                 print("\n✅ 不同类型数据集合并成功！")
                 print(f"输出目录: {result['output_path']}")
-                print(f"\n合并统计:")
+                print("\n合并统计:")
                 print(f"  - 总图片数: {result['total_images']}")
                 print(f"  - 总标签数: {result['total_labels']}")
                 print(f"  - 统一类别数: {len(result['unified_classes'])}")
@@ -1565,7 +1554,7 @@ class InteractiveInterface:
 
                 if "statistics" in result:
                     stats = result["statistics"]
-                    print(f"\n各数据集处理统计:")
+                    print("\n各数据集处理统计:")
                     for i, stat in enumerate(stats):
                         dataset_name = Path(stat['dataset_path']).name
                         print(f"  {i+1}. {dataset_name}:")
@@ -1574,7 +1563,7 @@ class InteractiveInterface:
                         print(f"     索引范围: {stat['start_index']}-{stat['end_index']}")
                         print(f"     处理时间: {stat['processing_time']}秒")
 
-                print(f"\n类别映射信息:")
+                print("\n类别映射信息:")
                 print(f"  - 原始类别总数: {sum(len(info['classes']) for info in all_classes_info)}")
                 print(f"  - 统一后类别数: {len(result['unified_classes'])}")
                 print(f"  - 统一类别列表: {', '.join(result['unified_classes'][:5])}")
@@ -1656,12 +1645,10 @@ class InteractiveInterface:
 
             print("\n=== 多进程分批处理设置 ===")
             print(f"检测到 {cpu_count} 个CPU核心")
-
-            batch_count = self._get_int_input(
+            _ = self._get_int_input(
                 "批次数量 (默认100): ", default=100, min_val=1, max_val=1000
             )
-
-            max_processes = self._get_int_input(
+            _ = self._get_int_input(
                 f"最大进程数 (推荐{cpu_count}): ",
                 default=cpu_count,
                 min_val=1,
@@ -1682,7 +1669,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n转换失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n转换失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -1732,12 +1719,10 @@ class InteractiveInterface:
 
             print("\n=== 多进程分批处理设置 ===")
             print(f"检测到 {cpu_count} 个CPU核心")
-
-            batch_count = self._get_int_input(
+            _ = self._get_int_input(
                 "批次数量 (默认100): ", default=100, min_val=1, max_val=1000
             )
-
-            max_processes = self._get_int_input(
+            _ = self._get_int_input(
                 f"最大进程数 (推荐{cpu_count}): ",
                 default=cpu_count,
                 min_val=1,
@@ -1758,7 +1743,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n调整失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n调整失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -1788,7 +1773,7 @@ class InteractiveInterface:
             self._display_enhanced_image_info(result)
 
         except UserInterruptError:
-            print(f"\n获取信息失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n获取信息失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2010,8 +1995,7 @@ class InteractiveInterface:
 
             # 如果没有匹配的自定义级别，使用默认判断
             return "低清"
-
-        except Exception as e:
+        except Exception:
             # 配置读取失败时使用硬编码阈值
             if width >= 3840 and height >= 2160:
                 return "超清 4K"
@@ -2132,7 +2116,7 @@ class InteractiveInterface:
                 total_images = 1
             else:
                 # 统计目录中的图片文件数量
-                image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+                image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".webp"}
                 total_images = 0
 
                 if recursive:
@@ -2180,7 +2164,7 @@ class InteractiveInterface:
                 print(f"最大尺寸: {max_size[0]}x{max_size[1]}")
             if Path(input_path).is_dir():
                 print(f"递归处理: {'是' if recursive else '否'}")
-            print(f"处理模式: 多进程分批处理")
+            print("处理模式: 多进程分批处理")
             print(f"每批次大小: {batch_size} 张图片")
             print(f"总批次数: {batch_count} 个批次")
             print(f"最大进程数: {max_processes}")
@@ -2214,7 +2198,7 @@ class InteractiveInterface:
                 print(f"空间节省率: {stats['overall_space_saved_percentage']:.1f}%")
 
         except UserInterruptError:
-            print(f"\n压缩失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n压缩失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2275,7 +2259,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n组织失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n组织失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2303,7 +2287,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n复制失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n复制失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2331,7 +2315,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n移动失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n移动失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2371,7 +2355,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n移动失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n移动失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2441,7 +2425,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n重命名失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n重命名失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2543,7 +2527,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n重命名失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n重命名失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2623,7 +2607,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n重命名失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n重命名失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2685,7 +2669,7 @@ class InteractiveInterface:
                     failed_files.append((json_file, str(e)))
 
             # 显示结果
-            print(f"\n删除完成!")
+            print("\n删除完成!")
             print(f"成功删除: {deleted_count} 个文件")
 
             if failed_files:
@@ -2697,7 +2681,7 @@ class InteractiveInterface:
                     print(f"  ... 还有 {len(failed_files) - 5} 个失败的文件")
 
         except UserInterruptError:
-            print(f"\n删除失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n删除失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2751,7 +2735,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n创建失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n创建失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2785,7 +2769,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n翻转失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n翻转失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2822,7 +2806,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n过滤失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n过滤失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2862,7 +2846,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n删除失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n删除失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -2911,7 +2895,6 @@ class InteractiveInterface:
 
                 class_name = classes[target_class]
                 print(f"\n选择的类别: {target_class} - {class_name}")
-
             except Exception as e:
                 print(f"\n❌ 读取classes.txt文件失败: {e}")
                 self._pause()
@@ -2945,7 +2928,7 @@ class InteractiveInterface:
             self._display_result(result)
 
         except UserInterruptError:
-            print(f"\n删除失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n删除失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -3108,8 +3091,8 @@ class InteractiveInterface:
 
             # 3. 检查核心模块（静默）
             try:
-                from ..config.settings import ConfigManager
-                from ..processors import FileProcessor, ImageProcessor, YOLOProcessor
+                from ..config.settings import ConfigManager  # noqa: F401
+                from ..processors import FileProcessor, ImageProcessor, YOLOProcessor  # noqa: F401
             except ImportError:
                 pass  # 静默忽略导入错误
 
@@ -3137,7 +3120,7 @@ class InteractiveInterface:
 
                             with open(config_path, "r", encoding="utf-8") as f:
                                 json.load(f)
-                            print(f"  - JSON格式有效")
+                            print("  - JSON格式有效")
                         elif config_file.endswith(".yaml") or config_file.endswith(
                             ".yml"
                         ):
@@ -3146,7 +3129,7 @@ class InteractiveInterface:
 
                                 with open(config_path, "r", encoding="utf-8") as f:
                                     yaml.safe_load(f)
-                                print(f"  - YAML格式有效")
+                                print("  - YAML格式有效")
                             except ImportError:
                                 pass  # 静默忽略yaml库缺失
                     except Exception:
@@ -3156,7 +3139,7 @@ class InteractiveInterface:
 
             # 检查ConfigManager是否能正常加载
             try:
-                config_manager = ConfigManager()
+                _ = ConfigManager()
                 print("✓ ConfigManager初始化成功")
             except Exception:
                 pass  # 静默忽略初始化错误
@@ -3303,7 +3286,7 @@ image:
                         if key == "quality_analysis" and isinstance(value, dict):
                             print(f"  {chinese_key}:")
                             if "custom_levels" in value:
-                                print(f"    清晰度级别:")
+                                print("    清晰度级别:")
                                 for level in value["custom_levels"]:
                                     name = level.get("name", "未知")
                                     threshold = level.get("threshold", [0, 0])
@@ -3323,7 +3306,6 @@ image:
                             print(f"  {chinese_key}: {value}")
                 else:
                     print(f"  {values}")
-
         except Exception as e:
             print(f"\n查看配置失败: {e}")
 
@@ -3346,7 +3328,7 @@ image:
             print(f"\n配置文件已加载: {config_file}")
 
         except UserInterruptError:
-            print(f"\n加载配置失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n加载配置失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -3372,7 +3354,7 @@ image:
             print(f"\n配置已保存到: {config_file}")
 
         except UserInterruptError:
-            print(f"\n保存配置失败: 用户中断操作 (Code: USER_INTERRUPT)")
+            print("\n保存配置失败: 用户中断操作 (Code: USER_INTERRUPT)")
             print("\n按回车键继续...")
             input()
         except Exception as e:
@@ -3390,7 +3372,6 @@ image:
                 print("\n配置已重置为默认值")
             else:
                 print("\n操作已取消")
-
         except Exception as e:
             print(f"\n重置配置失败: {e}")
 
@@ -3449,7 +3430,6 @@ image:
             test_logger.info("ℹ️ 这是INFO级别的日志")
             test_logger.warning("⚠️ 这是WARNING级别的日志")
             test_logger.error("❌ 这是ERROR级别的日志")
-
         except Exception as e:
             print(f"\n设置日志级别失败: {e}")
 
@@ -3505,7 +3485,6 @@ image:
                 self.config_manager.set("paths.log_dir", log_dir)
 
             print("\n✅ 路径配置已更新")
-
         except Exception as e:
             print(f"\n修改路径配置失败: {e}")
 
@@ -3563,7 +3542,6 @@ image:
                 self.config_manager.set("processing.retry_count", retry_count)
 
             print("\n✅ 处理配置已更新")
-
         except Exception as e:
             print(f"\n修改处理配置失败: {e}")
 
@@ -3659,7 +3637,6 @@ image:
                 self.config_manager.set("image_processing.chunk_size", chunk_size)
 
             print("\n✅ 图像处理配置已更新")
-
         except Exception as e:
             print(f"\n修改图像处理配置失败: {e}")
 
@@ -3702,7 +3679,6 @@ image:
                 self.config_manager.set("yolo.validate_on_load", validate_on_load)
 
             print("\n✅ YOLO配置已更新")
-
         except Exception as e:
             print(f"\n修改YOLO配置失败: {e}")
 
@@ -3742,7 +3718,6 @@ image:
                 self.config_manager.set("ui.show_progress", show_progress)
 
             print("\n✅ 界面配置已更新")
-
         except Exception as e:
             print(f"\n修改界面配置失败: {e}")
 
@@ -3913,9 +3888,9 @@ image:
 
                 if must_exist and not path.exists():
                     print(f"路径不存在: {path}")
-                    print(f"提示: 请确保路径格式正确")
-                    print(f"Windows路径示例: C:\\Users\\username\\folder")
-                    print(f"或者使用正斜杠: C:/Users/username/folder")
+                    print("提示: 请确保路径格式正确")
+                    print("Windows路径示例: C:\\Users\\username\\folder")
+                    print("或者使用正斜杠: C:/Users/username/folder")
                     continue
 
                 if must_be_dir and path.exists() and not path.is_dir():
@@ -3928,9 +3903,9 @@ image:
                 raise
             except Exception as e:
                 print(f"无效路径: {e}")
-                print(f"提示: 请检查路径格式")
-                print(f"Windows路径示例: C:\\Users\\username\\folder")
-                print(f"或者使用正斜杠: C:/Users/username/folder")
+                print("提示: 请检查路径格式")
+                print("Windows路径示例: C:\\Users\\username\\folder")
+                print("或者使用正斜杠: C:/Users/username/folder")
 
     def _get_int_input(
         self,
@@ -4119,7 +4094,7 @@ image:
                     # 检查是否路径被调整（通过比较original_path和dataset_path）
                     original_path = stats.get("original_path")
                     if original_path and str(original_path) != str(value):
-                        print(f"    💡 已自动调整为数据集根目录")
+                        print("    💡 已自动调整为数据集根目录")
                 elif key != "original_path":  # 不显示original_path字段
                     print(f"  {chinese_key}: {value}")
 
@@ -4173,7 +4148,6 @@ image:
                 print("⚠ 当前未运行在虚拟环境中，建议使用虚拟环境")
 
             print("\n系统环境检查完成")
-
         except Exception as e:
             print(f"系统环境检查失败: {e}")
 
@@ -4247,7 +4221,6 @@ image:
                     print(f"  - {pkg}")
             else:
                 print("\n✓ 所有依赖包都已安装")
-
         except Exception as e:
             print(f"依赖检查失败: {e}")
 
@@ -4291,7 +4264,6 @@ image:
                 print("❌ 转换失败")
                 if result.get("error"):
                     print(f"错误信息: {result['error']}")
-
         except Exception as e:
             print(f"\nYOLO数据转CTDS失败: {e}")
 
@@ -4330,7 +4302,6 @@ image:
                 print("❌ 依赖安装失败")
                 print("\n错误信息:")
                 print(result.stderr)
-
         except Exception as e:
             print(f"自动安装依赖失败: {e}")
 
@@ -4354,16 +4325,16 @@ image:
 
                         with open(config_path, "r", encoding="utf-8") as f:
                             json.load(f)
-                        print(f"  - JSON格式有效")
+                        print("  - JSON格式有效")
                     elif config_file.endswith(".yaml") or config_file.endswith(".yml"):
                         try:
                             import yaml
 
                             with open(config_path, "r", encoding="utf-8") as f:
                                 yaml.safe_load(f)
-                            print(f"  - YAML格式有效")
+                            print("  - YAML格式有效")
                         except ImportError:
-                            print(f"  - 无法验证YAML格式（缺少yaml库）")
+                            print("  - 无法验证YAML格式（缺少yaml库）")
                 except Exception as e:
                     print(f"  - ❌ 配置文件格式错误: {e}")
             else:
@@ -4371,7 +4342,7 @@ image:
 
         # 检查ConfigManager是否能正常加载
         try:
-            config_manager = ConfigManager()
+            _ = ConfigManager()
             print("\n✓ ConfigManager初始化成功")
         except Exception as e:
             print(f"\n❌ ConfigManager初始化失败: {e}")
@@ -4419,7 +4390,6 @@ image:
                 print(f"✓ 默认配置文件已存在: {default_config_path}")
 
             print("\n工作目录初始化完成")
-
         except Exception as e:
             print(f"工作目录初始化失败: {e}")
 
@@ -4479,7 +4449,6 @@ image:
     def _check_system_info(self) -> bool:
         """检查系统信息"""
         try:
-            import platform
             import sys
 
             # 基本检查
@@ -4543,7 +4512,7 @@ image:
     def _check_config_info(self) -> bool:
         """检查配置信息"""
         try:
-            config_manager = ConfigManager()
+            _ = ConfigManager()
             return True
         except Exception:
             return False
@@ -4562,8 +4531,8 @@ image:
     def _check_core_modules(self) -> bool:
         """检查核心模块"""
         try:
-            from ..config.settings import ConfigManager
-            from ..processors import FileProcessor, ImageProcessor, YOLOProcessor
+            from ..config.settings import ConfigManager  # noqa: F401
+            from ..processors import FileProcessor, ImageProcessor, YOLOProcessor  # noqa: F401
 
             return True
         except Exception:

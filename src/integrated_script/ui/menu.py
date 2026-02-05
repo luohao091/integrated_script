@@ -9,7 +9,6 @@ menu.py
 """
 
 import os
-import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..config.exceptions import UserInterruptError
@@ -130,9 +129,9 @@ class MenuSystem:
 
         # 显示返回选项
         if self.menu_stack:
-            print(f" 0. 返回上级菜单")
+            print(" 0. 返回上级菜单")
         else:
-            print(f" 0. 退出程序")
+            print(" 0. 退出程序")
 
         print("=" * 60)
 
@@ -372,7 +371,7 @@ class MenuSystem:
         for i, item in enumerate(items, 1):
             print(f"{i:2d}. {item}")
 
-        print(f" 0. 取消")
+        print(" 0. 取消")
         print("=" * 60)
 
         if allow_multiple:

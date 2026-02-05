@@ -8,18 +8,16 @@ label_processor.py
 提供标签文件的创建、修改、转换等功能，特别针对机器学习标注数据。
 """
 
-import os
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List
 
-from ..config.exceptions import FileProcessingError, ProcessingError, ValidationError
+from ..config.exceptions import ProcessingError, ValidationError
 from ..core.base import BaseProcessor
-from ..core.progress import process_with_progress, progress_context
+from ..core.progress import process_with_progress
 from ..core.utils import (
     create_directory,
     delete_file_safe,
     get_file_list,
-    safe_file_operation,
     validate_path,
 )
 

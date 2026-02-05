@@ -8,14 +8,12 @@ file_processor.py
 提供文件复制、移动、删除、重命名等基本文件操作功能。
 """
 
-import os
-import shutil
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
-from ..config.exceptions import FileProcessingError, ProcessingError
+from ..config.exceptions import ProcessingError
 from ..core.base import BaseProcessor
-from ..core.progress import process_with_progress, progress_context
+from ..core.progress import process_with_progress
 from ..core.utils import (
     copy_file_safe,
     create_directory,
@@ -24,7 +22,6 @@ from ..core.utils import (
     get_file_list,
     get_unique_filename,
     move_file_safe,
-    safe_file_operation,
     validate_path,
 )
 
@@ -849,7 +846,7 @@ class FileProcessor(BaseProcessor):
                         original_path = temp_path.parent / original_name
                         if not original_path.exists():
                             temp_path.rename(original_path)
-                    except:
+                    except Exception:
                         pass
 
                     result["failed_files"].append(
@@ -1063,7 +1060,7 @@ class FileProcessor(BaseProcessor):
                             mapping["temp_img"].rename(original_img_path)
                         if not original_label_path.exists():
                             mapping["temp_label"].rename(original_label_path)
-                    except:
+                    except Exception:
                         pass
 
                     result["failed_pairs"].append(

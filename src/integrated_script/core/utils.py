@@ -9,12 +9,11 @@ utils.py
 """
 
 import hashlib
-import os
 import shutil
 import time
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 
 from ..config.exceptions import FileProcessingError, PathError, ProcessingError
 from .logging_config import get_logger

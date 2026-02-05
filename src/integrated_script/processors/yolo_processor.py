@@ -19,9 +19,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from ..config.exceptions import DatasetError, FileProcessingError, ValidationError
-from ..core.base import BaseProcessor
-from ..core.progress import process_with_progress, progress_context
+from ..config.exceptions import DatasetError, ValidationError
+from ..core.progress import progress_context
 from ..core.utils import (
     copy_file_safe,
     create_directory,
@@ -108,8 +107,6 @@ class YOLOProcessor(DatasetProcessor):
                     "deleted_images": 0,
                 },
             }
-            hard_error = False
-            hard_error = False
 
             # 检查每个标签文件
             zero_only_files = []
@@ -1172,8 +1169,10 @@ class YOLOProcessor(DatasetProcessor):
 
             # 使用OpenCV重新保存图像（如果可用）
             try:
-                import cv2
+                import importlib.util
 
+                if importlib.util.find_spec("cv2") is None:
+                    raise ImportError
                 self._convert_images_with_opencv(images_dir)
             except ImportError:
                 self.logger.warning("OpenCV不可用，跳过图像转换")
@@ -2393,7 +2392,7 @@ class YOLOProcessor(DatasetProcessor):
 
             # 预建立标签映射索引（优化点1）
             mapping_start = time.time()
-            self.logger.info(f"建立标签映射索引...")
+            self.logger.info("建立标签映射索引...")
             label_mapping = self._build_label_mapping(label_files)
             mapping_time = time.time() - mapping_start
 
