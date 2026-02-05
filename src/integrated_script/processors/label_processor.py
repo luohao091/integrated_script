@@ -717,5 +717,6 @@ class LabelProcessor(BaseProcessor):
         Returns:
             Dict[str, Any]: 转换结果
         """
+        _ = source_format
         # TODO: 实现标签格式转换
         return {"success": False, "message": "标签格式转换功能尚未实现"}

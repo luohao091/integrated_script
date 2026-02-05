@@ -232,13 +232,5 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
 
-def console_entry_point() -> None:
-    """控制台入口点
-
-    用于setup.py中的console_scripts配置。
-    """
-    sys.exit(main())
-
-
 if __name__ == "__main__":
     sys.exit(main())
