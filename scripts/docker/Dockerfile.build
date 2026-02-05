@@ -11,11 +11,17 @@ RUN if command -v microdnf >/dev/null 2>&1; then \
     else \
       echo "No package manager found, skipping system deps install."; \
     fi
-USER 1001
+
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install -U pip
+
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /work
 
 COPY requirements.txt /tmp/requirements.txt
 
-RUN python -m pip install -U pip \
-    && python -m pip install -r /tmp/requirements.txt pyinstaller
+RUN /opt/venv/bin/pip install -r /tmp/requirements.txt pyinstaller
+
+USER 1001

@@ -30,7 +30,7 @@ jobs:
             checkout_clean: true
             use_container: true
             container_image: ghcr.io/luohao091/integrated_script-build:py39
-            container_python: /usr/bin/python3.9
+            container_python: /opt/venv/bin/python
             docker_cmd: docker
             install_deps: false
             exe_name: integrated_script
@@ -44,7 +44,7 @@ jobs:
             checkout_clean: false
             use_container: true
             container_image: ghcr.io/luohao091/integrated_script-build:py39
-            container_python: /usr/bin/python3.9
+            container_python: /opt/venv/bin/python
             docker_cmd: sudo docker
             install_deps: false
             exe_name: integrated_script
