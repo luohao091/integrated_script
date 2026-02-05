@@ -8,14 +8,12 @@ utils.py
 提供文件操作、路径验证、数据处理等通用功能。
 """
 
-import hashlib
 import shutil
-import time
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Union
 
-from ..config.exceptions import FileProcessingError, PathError, ProcessingError
+from ..config.exceptions import FileProcessingError, PathError
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -327,48 +325,6 @@ def delete_file_safe(path: Union[str, Path], missing_ok: bool = True) -> bool:
         return False
 
 
-def get_file_hash(file_path: Union[str, Path], algorithm: str = "md5") -> str:
-    """计算文件哈希值
-
-    Args:
-        file_path: 文件路径
-        algorithm: 哈希算法 ('md5', 'sha1', 'sha256')
-
-    Returns:
-        str: 文件哈希值
-    """
-    path = validate_path(file_path, must_exist=True, must_be_file=True)
-
-    hash_func = getattr(hashlib, algorithm.lower())
-    hasher = hash_func()
-
-    try:
-        with open(path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hasher.update(chunk)
-
-        hash_value = hasher.hexdigest()
-        logger.debug(f"计算文件哈希 ({algorithm}): {path} -> {hash_value}")
-        return hash_value
-
-    except Exception as e:
-        raise FileProcessingError(
-            f"计算文件哈希失败: {str(e)}", file_path=str(path), operation="hash"
-        )
-
-
-def get_file_size(file_path: Union[str, Path]) -> int:
-    """获取文件大小
-
-    Args:
-        file_path: 文件路径
-
-    Returns:
-        int: 文件大小（字节）
-    """
-    path = validate_path(file_path, must_exist=True, must_be_file=True)
-    return path.stat().st_size
-
 
 def format_file_size(size_bytes: int) -> str:
     """格式化文件大小
@@ -390,132 +346,6 @@ def format_file_size(size_bytes: int) -> str:
 
     return f"{size_bytes:.1f} {size_names[i]}"
 
-
-def retry_on_failure(
-    max_retries: int = 3,
-    delay: float = 1.0,
-    backoff: float = 2.0,
-    exceptions: tuple = (Exception,),
-):
-    """重试装饰器
-
-    Args:
-        max_retries: 最大重试次数
-        delay: 初始延迟时间（秒）
-        backoff: 延迟倍数
-        exceptions: 需要重试的异常类型
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            current_delay = delay
-            last_exception = None
-
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt < max_retries:
-                        logger.warning(
-                            f"操作失败，{current_delay:.1f}秒后重试 "
-                            f"(第{attempt + 1}/{max_retries}次): {str(e)}"
-                        )
-                        time.sleep(current_delay)
-                        current_delay *= backoff
-                    else:
-                        logger.error(f"操作失败，已达到最大重试次数: {str(e)}")
-                        raise
-
-            # 这行代码理论上不会执行到
-            raise last_exception
-
-        return wrapper
-
-    return decorator
-
-
-def batch_process(
-    items: List[Any], batch_size: int, processor: Callable[[List[Any]], Any]
-) -> List[Any]:
-    """批量处理数据
-
-    Args:
-        items: 要处理的项目列表
-        batch_size: 批次大小
-        processor: 处理函数
-
-    Returns:
-        List[Any]: 处理结果列表
-    """
-    results = []
-    total_batches = (len(items) + batch_size - 1) // batch_size
-
-    logger.info(f"开始批量处理: {len(items)} 个项目，分 {total_batches} 批")
-
-    for i in range(0, len(items), batch_size):
-        batch = items[i : i + batch_size]
-        batch_num = i // batch_size + 1
-
-        logger.debug(f"处理第 {batch_num}/{total_batches} 批 ({len(batch)} 个项目)")
-
-        try:
-            batch_result = processor(batch)
-            results.extend(
-                batch_result if isinstance(batch_result, list) else [batch_result]
-            )
-        except Exception as e:
-            logger.error(f"批次 {batch_num} 处理失败: {str(e)}")
-            raise ProcessingError(
-                f"批量处理失败: {str(e)}",
-                context={"batch_num": batch_num, "batch_size": len(batch)},
-            )
-
-    logger.info(f"批量处理完成: {len(results)} 个结果")
-    return results
-
-
-def ensure_directory_exists(path: Union[str, Path]) -> Path:
-    """确保目录存在
-
-    Args:
-        path: 目录路径
-
-    Returns:
-        Path: 目录路径对象
-    """
-    dir_path = Path(path)
-    dir_path.mkdir(parents=True, exist_ok=True)
-    return dir_path
-
-
-def clean_filename(filename: str, replacement: str = "_") -> str:
-    """清理文件名中的非法字符
-
-    Args:
-        filename: 原始文件名
-        replacement: 替换字符
-
-    Returns:
-        str: 清理后的文件名
-    """
-    import re
-
-    # Windows 非法字符
-    illegal_chars = r'[<>:"/\\|?*]'
-
-    # 替换非法字符
-    clean_name = re.sub(illegal_chars, replacement, filename)
-
-    # 移除开头和结尾的空格和点
-    clean_name = clean_name.strip(" .")
-
-    # 确保不为空
-    if not clean_name:
-        clean_name = "unnamed"
-
-    return clean_name
 
 
 def get_unique_filename(directory: Union[str, Path], filename: str) -> Path:

@@ -14,7 +14,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 
 class ColoredFormatter(logging.Formatter):
@@ -161,42 +161,6 @@ class LogManager:
 
         return self.loggers[name]
 
-    def create_module_logger(
-        self, module_name: str, log_file: Optional[str] = None
-    ) -> logging.Logger:
-        """为模块创建专用日志记录器
-
-        Args:
-            module_name: 模块名称
-            log_file: 专用日志文件名（可选）
-
-        Returns:
-            logging.Logger: 模块日志记录器
-        """
-        logger = self.get_logger(module_name)
-
-        if log_file:
-            # 添加模块专用文件处理器
-            module_log_file = self.log_dir / log_file
-            module_handler = logging.handlers.RotatingFileHandler(
-                module_log_file,
-                maxBytes=5 * 1024 * 1024,  # 5MB
-                backupCount=3,
-                encoding="utf-8",
-            )
-            module_handler.setLevel(logging.DEBUG)
-
-            # 模块文件格式
-            module_format = (
-                "%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
-            )
-            module_formatter = logging.Formatter(module_format)
-            module_handler.setFormatter(module_formatter)
-
-            logger.addHandler(module_handler)
-
-        return logger
-
     def set_level(self, level: str) -> None:
         """设置日志级别
 
@@ -246,56 +210,6 @@ class LogManager:
         # 添加到根日志记录器
         root_logger = logging.getLogger()
         root_logger.addHandler(error_handler)
-
-    def cleanup_old_logs(self, days: int = 30) -> None:
-        """清理旧日志文件
-
-        Args:
-            days: 保留天数
-        """
-        import time
-
-        cutoff_time = time.time() - (days * 24 * 60 * 60)
-
-        for log_file in self.log_dir.glob("*.log*"):
-            try:
-                if log_file.stat().st_mtime < cutoff_time:
-                    log_file.unlink()
-                    print(f"删除旧日志文件: {log_file}")
-            except Exception as e:
-                print(f"删除日志文件失败 {log_file}: {str(e)}")
-
-    def get_log_stats(self) -> Dict[str, Any]:
-        """获取日志统计信息
-
-        Returns:
-            Dict[str, Any]: 日志统计信息
-        """
-        stats = {
-            "log_dir": str(self.log_dir),
-            "log_level": self.log_level,
-            "loggers_count": len(self.loggers),
-            "log_files": [],
-            "total_size": 0,
-        }
-
-        for log_file in self.log_dir.glob("*.log*"):
-            try:
-                file_size = log_file.stat().st_size
-                stats["log_files"].append(
-                    {
-                        "name": log_file.name,
-                        "size": file_size,
-                        "modified": datetime.fromtimestamp(
-                            log_file.stat().st_mtime
-                        ).isoformat(),
-                    }
-                )
-                stats["total_size"] += file_size
-            except Exception:
-                pass
-
-        return stats
 
 
 # 全局日志管理器实例
@@ -361,108 +275,3 @@ def set_log_level(level: str) -> None:
         _log_manager = setup_logging()
 
     _log_manager.set_level(level)
-
-
-def get_log_manager() -> Optional[LogManager]:
-    """获取日志管理器实例
-
-    Returns:
-        LogManager: 日志管理器实例或None
-    """
-    return _log_manager
-
-
-# 日志装饰器
-def log_function_call(
-    logger: Optional[logging.Logger] = None,
-    log_args: bool = False,
-    log_result: bool = False,
-):
-    """函数调用日志装饰器
-
-    Args:
-        logger: 日志记录器
-        log_args: 是否记录参数
-        log_result: 是否记录返回值
-    """
-
-    def decorator(func):
-        nonlocal logger
-        if logger is None:
-            logger = get_logger(func.__module__)
-
-        def wrapper(*args, **kwargs):
-            func_name = f"{func.__module__}.{func.__name__}"
-
-            # 记录函数调用开始
-            if log_args:
-                logger.debug(
-                    f"调用函数 {func_name}，参数: args={args}, kwargs={kwargs}"
-                )
-            else:
-                logger.debug(f"调用函数 {func_name}")
-
-            try:
-                result = func(*args, **kwargs)
-
-                # 记录函数调用成功
-                if log_result:
-                    logger.debug(f"函数 {func_name} 执行成功，返回值: {result}")
-                else:
-                    logger.debug(f"函数 {func_name} 执行成功")
-
-                return result
-
-            except Exception as e:
-                # 记录函数调用失败
-                logger.error(f"函数 {func_name} 执行失败: {str(e)}", exc_info=True)
-                raise
-
-        return wrapper
-
-    return decorator
-
-
-# 性能监控装饰器
-def log_performance(logger: Optional[logging.Logger] = None, threshold: float = 1.0):
-    """性能监控装饰器
-
-    Args:
-        logger: 日志记录器
-        threshold: 性能警告阈值（秒）
-    """
-
-    def decorator(func):
-        nonlocal logger
-        if logger is None:
-            logger = get_logger(func.__module__)
-
-        def wrapper(*args, **kwargs):
-            import time
-
-            func_name = f"{func.__module__}.{func.__name__}"
-            start_time = time.time()
-
-            try:
-                result = func(*args, **kwargs)
-                elapsed_time = time.time() - start_time
-
-                if elapsed_time > threshold:
-                    logger.warning(
-                        f"函数 {func_name} 执行时间较长: {elapsed_time:.2f}秒"
-                    )
-                else:
-                    logger.debug(f"函数 {func_name} 执行时间: {elapsed_time:.2f}秒")
-
-                return result
-
-            except Exception as e:
-                elapsed_time = time.time() - start_time
-                logger.error(
-                    f"函数 {func_name} 执行失败 (耗时 {elapsed_time:.2f}秒): {str(e)}"
-                )
-                raise
-
-        return wrapper
-
-    return decorator

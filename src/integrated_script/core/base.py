@@ -10,7 +10,7 @@ base.py
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from ..config.exceptions import PathError, ProcessingError
 from ..config.settings import ConfigManager
@@ -42,8 +42,6 @@ class BaseProcessor(ABC):
         # 初始化状态
         self._initialized = False
         self._processing = False
-        self._results = {}
-
         # 执行初始化
         self._initialize()
 
@@ -146,25 +144,11 @@ class BaseProcessor(ABC):
             # 执行处理
             result = self.process(*args, **kwargs)
 
-            # 保存结果
-            self._results = {
-                "success": True,
-                "result": result,
-                "processor": self.name,
-                "timestamp": self._get_timestamp(),
-            }
-
             self.logger.info(f"处理器 {self.name} 运行完成")
             return result
 
         except Exception as e:
             self.logger.error(f"处理器 {self.name} 运行失败: {str(e)}")
-            self._results = {
-                "success": False,
-                "error": str(e),
-                "processor": self.name,
-                "timestamp": self._get_timestamp(),
-            }
             raise
 
         finally:
@@ -173,30 +157,6 @@ class BaseProcessor(ABC):
                 self.cleanup()
             except Exception as e:
                 self.logger.warning(f"清理资源时出错: {str(e)}")
-
-    def get_results(self) -> Dict[str, Any]:
-        """获取处理结果
-
-        Returns:
-            dict: 处理结果字典
-        """
-        return self._results.copy()
-
-    def is_initialized(self) -> bool:
-        """检查是否已初始化
-
-        Returns:
-            bool: 是否已初始化
-        """
-        return self._initialized
-
-    def is_processing(self) -> bool:
-        """检查是否正在处理
-
-        Returns:
-            bool: 是否正在处理
-        """
-        return self._processing
 
     def get_config(self, key: str, default: Any = None) -> Any:
         """获取配置值
@@ -209,15 +169,6 @@ class BaseProcessor(ABC):
             配置值
         """
         return self.config.get(key, default)
-
-    def set_config(self, key: str, value: Any) -> None:
-        """设置配置值
-
-        Args:
-            key: 配置键
-            value: 配置值
-        """
-        self.config.set(key, value)
 
     def validate_path(
         self,
@@ -285,16 +236,6 @@ class BaseProcessor(ABC):
                     files.append(file_path)
 
         return sorted(files)
-
-    def _get_timestamp(self) -> str:
-        """获取当前时间戳
-
-        Returns:
-            str: ISO格式的时间戳
-        """
-        from datetime import datetime
-
-        return datetime.now().isoformat()
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}(name={self.name}, initialized={self._initialized})"

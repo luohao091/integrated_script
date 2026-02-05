@@ -702,21 +702,3 @@ class LabelProcessor(BaseProcessor):
 
         except Exception as e:
             raise ProcessingError(f"删除指定类别标签失败: {str(e)}")
-
-    def convert_label_format(
-        self, input_dir: str, output_dir: str, source_format: str, target_format: str
-    ) -> Dict[str, Any]:
-        """转换标签格式
-
-        Args:
-            input_dir: 输入目录
-            output_dir: 输出目录
-            source_format: 源格式
-            target_format: 目标格式
-
-        Returns:
-            Dict[str, Any]: 转换结果
-        """
-        _ = source_format
-        # TODO: 实现标签格式转换
-        return {"success": False, "message": "标签格式转换功能尚未实现"}

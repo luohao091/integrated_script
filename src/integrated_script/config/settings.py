@@ -91,7 +91,6 @@ class ConfigManager:
         self.config_file = Path(config_file)
         self.auto_save = auto_save
         self.config_data = self.DEFAULT_CONFIG.copy()
-        self._last_modified = None
 
         # 创建配置目录
         self.config_file.parent.mkdir(parents=True, exist_ok=True)
@@ -129,7 +128,6 @@ class ConfigManager:
 
             # 合并配置（保留默认值）
             self._merge_config(loaded_config)
-            self._last_modified = self.config_file.stat().st_mtime
 
         except (json.JSONDecodeError, yaml.YAMLError) as e:
             raise ConfigurationError(
@@ -171,7 +169,6 @@ class ConfigManager:
                 else:
                     json.dump(save_data, f, ensure_ascii=False, indent=2)
 
-            self._last_modified = self.config_file.stat().st_mtime
 
         except Exception as e:
             raise FileProcessingError(
@@ -336,22 +333,6 @@ class ConfigManager:
 
         return True
 
-    def reload_if_changed(self) -> bool:
-        """如果文件已更改则重新加载
-
-        Returns:
-            bool: 是否重新加载了配置
-        """
-        if not self.config_file.exists():
-            return False
-
-        current_mtime = self.config_file.stat().st_mtime
-        if self._last_modified is None or current_mtime > self._last_modified:
-            self.load()
-            return True
-
-        return False
-
     def _merge_config(self, new_config: Dict[str, Any]) -> None:
         """合并配置字典
 
@@ -381,35 +362,6 @@ class ConfigManager:
             dict: 配置字典的副本
         """
         return self.config_data.copy()
-
-    def export(self, export_file: Union[str, Path], format_type: str = "json") -> None:
-        """导出配置到文件
-
-        Args:
-            export_file: 导出文件路径
-            format_type: 导出格式 ('json' 或 'yaml')
-        """
-        export_path = Path(export_file)
-        export_path.parent.mkdir(parents=True, exist_ok=True)
-
-        try:
-            with open(export_path, "w", encoding="utf-8") as f:
-                if format_type.lower() == "yaml":
-                    yaml.dump(
-                        self.config_data,
-                        f,
-                        default_flow_style=False,
-                        allow_unicode=True,
-                        indent=2,
-                    )
-                else:
-                    json.dump(self.config_data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            raise FileProcessingError(
-                f"导出配置失败: {str(e)}",
-                file_path=str(export_path),
-                operation="export",
-            )
 
     def __str__(self) -> str:
         return f"ConfigManager(file={self.config_file}, auto_save={self.auto_save})"

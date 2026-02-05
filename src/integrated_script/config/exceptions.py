@@ -156,31 +156,3 @@ class UserInterruptError(ProcessingError):
 
 
 # 异常映射字典，用于根据错误类型快速创建异常
-EXCEPTION_MAP = {
-    "processing": ProcessingError,
-    "path": PathError,
-    "file": FileProcessingError,
-    "config": ConfigurationError,
-    "validation": ValidationError,
-    "dataset": DatasetError,
-    "interrupt": UserInterruptError,
-}
-
-
-def create_exception(error_type: str, message: str, **kwargs) -> ProcessingError:
-    """根据错误类型创建相应的异常实例
-
-    Args:
-        error_type (str): 错误类型
-        message (str): 错误消息
-        **kwargs: 其他参数
-
-    Returns:
-        ProcessingError: 相应的异常实例
-
-    Example:
-        >>> exc = create_exception("file", "文件不存在", file_path="/path/to/file")
-        >>> raise exc
-    """
-    exception_class = EXCEPTION_MAP.get(error_type, ProcessingError)
-    return exception_class(message, **kwargs)

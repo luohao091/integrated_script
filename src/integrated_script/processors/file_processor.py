@@ -9,7 +9,7 @@ file_processor.py
 """
 
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ..config.exceptions import ProcessingError
 from ..core.base import BaseProcessor
@@ -17,7 +17,6 @@ from ..core.progress import process_with_progress
 from ..core.utils import (
     copy_file_safe,
     create_directory,
-    delete_file_safe,
     format_file_size,
     get_file_list,
     get_unique_filename,
@@ -31,23 +30,15 @@ class FileProcessor(BaseProcessor):
 
     提供文件复制、移动、删除、重命名等基本文件操作功能。
 
-    Attributes:
-        operation_count (int): 操作计数
-        total_size_processed (int): 已处理的总文件大小
     """
 
     def __init__(self, **kwargs):
         """初始化文件处理器"""
         super().__init__(name="FileProcessor", **kwargs)
 
-        self.operation_count = 0
-        self.total_size_processed = 0
-
     def initialize(self) -> None:
         """初始化处理器"""
         self.logger.info("文件处理器初始化完成")
-        self.operation_count = 0
-        self.total_size_processed = 0
 
     def process(self, *args, **kwargs) -> Any:
         """主要处理方法（由子方法实现具体功能）"""
@@ -193,9 +184,6 @@ class FileProcessor(BaseProcessor):
                 result["statistics"]["total_size"]
             )
 
-            self.operation_count += result["statistics"]["copied_count"]
-            self.total_size_processed += result["statistics"]["total_size"]
-
             self.logger.info(f"文件复制完成: {result['statistics']}")
             return result
 
@@ -336,9 +324,6 @@ class FileProcessor(BaseProcessor):
                 result["statistics"]["total_size"]
             )
 
-            self.operation_count += result["statistics"]["moved_count"]
-            self.total_size_processed += result["statistics"]["total_size"]
-
             self.logger.info(f"文件移动完成: {result['statistics']}")
             return result
 
@@ -436,250 +421,6 @@ class FileProcessor(BaseProcessor):
 
         except Exception as e:
             raise ProcessingError(f"按数量移动图片失败: {str(e)}")
-
-    def delete_files(
-        self,
-        target_dir: str,
-        file_patterns: Optional[List[str]] = None,
-        recursive: bool = False,
-        confirm_callback: Optional[Callable[[List[Path]], bool]] = None,
-    ) -> Dict[str, Any]:
-        """批量删除文件
-
-        Args:
-            target_dir: 目标目录
-            file_patterns: 文件模式列表
-            recursive: 是否递归处理
-            confirm_callback: 确认回调函数
-
-        Returns:
-            Dict[str, Any]: 删除结果
-        """
-        try:
-            target_path = validate_path(target_dir, must_exist=True, must_be_dir=True)
-
-            self.logger.info(f"开始删除文件: {target_path}")
-
-            # 获取文件列表
-            if file_patterns:
-                files_to_delete = []
-                for pattern in file_patterns:
-                    if recursive:
-                        files_to_delete.extend(target_path.rglob(pattern))
-                    else:
-                        files_to_delete.extend(target_path.glob(pattern))
-                files_to_delete = [f for f in set(files_to_delete) if f.is_file()]
-            else:
-                files_to_delete = get_file_list(
-                    target_path, extensions=None, recursive=recursive
-                )
-
-            # 确认删除
-            if confirm_callback and not confirm_callback(files_to_delete):
-                return {
-                    "success": False,
-                    "message": "用户取消删除操作",
-                    "statistics": {"total_files": len(files_to_delete)},
-                }
-
-            result = {
-                "success": True,
-                "target_dir": str(target_path),
-                "deleted_files": [],
-                "failed_files": [],
-                "statistics": {
-                    "total_files": len(files_to_delete),
-                    "deleted_count": 0,
-                    "failed_count": 0,
-                    "total_size": 0,
-                },
-            }
-
-            # 删除文件
-            def delete_single_file(file_path: Path) -> Dict[str, Any]:
-                try:
-                    file_size = file_path.stat().st_size
-
-                    delete_file_safe(file_path)
-
-                    return {
-                        "success": True,
-                        "deleted_file": str(file_path),
-                        "file_size": file_size,
-                    }
-
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "failed_file": str(file_path),
-                        "error": str(e),
-                        "file_size": 0,
-                    }
-
-            # 批量处理
-            delete_results = process_with_progress(
-                files_to_delete, delete_single_file, "删除文件"
-            )
-
-            # 统计结果
-            for delete_result in delete_results:
-                if delete_result:
-                    if delete_result["success"]:
-                        result["deleted_files"].append(delete_result)
-                        result["statistics"]["deleted_count"] += 1
-                        result["statistics"]["total_size"] += delete_result["file_size"]
-                    else:
-                        result["failed_files"].append(delete_result)
-                        result["statistics"]["failed_count"] += 1
-                        result["success"] = False
-
-            # 格式化大小信息
-            result["statistics"]["total_size_formatted"] = format_file_size(
-                result["statistics"]["total_size"]
-            )
-
-            self.operation_count += result["statistics"]["deleted_count"]
-            self.total_size_processed += result["statistics"]["total_size"]
-
-            self.logger.info(f"文件删除完成: {result['statistics']}")
-            return result
-
-        except Exception as e:
-            raise ProcessingError(f"文件删除失败: {str(e)}")
-
-    def rename_files(
-        self,
-        target_dir: str,
-        rename_pattern: str,
-        file_patterns: Optional[List[str]] = None,
-        recursive: bool = False,
-        preview_only: bool = False,
-    ) -> Dict[str, Any]:
-        """批量重命名文件
-
-        Args:
-            target_dir: 目标目录
-            rename_pattern: 重命名模式（支持 {name}, {ext}, {index} 等占位符）
-            file_patterns: 文件模式列表
-            recursive: 是否递归处理
-            preview_only: 仅预览，不实际重命名
-
-        Returns:
-            Dict[str, Any]: 重命名结果
-        """
-        try:
-            target_path = validate_path(target_dir, must_exist=True, must_be_dir=True)
-
-            self.logger.info(f"开始重命名文件: {target_path}")
-            self.logger.info(f"重命名模式: {rename_pattern}")
-
-            # 获取文件列表
-            if file_patterns:
-                files_to_rename = []
-                for pattern in file_patterns:
-                    if recursive:
-                        files_to_rename.extend(target_path.rglob(pattern))
-                    else:
-                        files_to_rename.extend(target_path.glob(pattern))
-                files_to_rename = [f for f in set(files_to_rename) if f.is_file()]
-            else:
-                files_to_rename = get_file_list(
-                    target_path, extensions=None, recursive=recursive
-                )
-
-            # 按名称排序以确保一致的索引
-            files_to_rename.sort(key=lambda x: x.name)
-
-            result = {
-                "success": True,
-                "target_dir": str(target_path),
-                "rename_pattern": rename_pattern,
-                "preview_only": preview_only,
-                "renamed_files": [],
-                "failed_files": [],
-                "statistics": {
-                    "total_files": len(files_to_rename),
-                    "renamed_count": 0,
-                    "failed_count": 0,
-                },
-            }
-
-            # 重命名文件
-            def rename_single_file(file_info: tuple) -> Dict[str, Any]:
-                file_path, index = file_info
-                try:
-                    # 生成新文件名
-                    new_name = rename_pattern.format(
-                        name=file_path.stem,
-                        ext=file_path.suffix,
-                        index=index + 1,
-                        index0=index,
-                    )
-
-                    new_path = file_path.parent / new_name
-
-                    # 确保新文件名唯一
-                    if new_path.exists() and new_path != file_path:
-                        new_path = get_unique_filename(new_path.parent, new_path.name)
-
-                    if preview_only:
-                        return {
-                            "success": True,
-                            "action": "preview",
-                            "old_name": str(file_path),
-                            "new_name": str(new_path),
-                        }
-
-                    # 实际重命名
-                    if new_path != file_path:
-                        file_path.rename(new_path)
-
-                    return {
-                        "success": True,
-                        "action": "renamed",
-                        "old_name": str(file_path),
-                        "new_name": str(new_path),
-                    }
-
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "action": "failed",
-                        "old_name": str(file_path),
-                        "error": str(e),
-                    }
-
-            # 准备文件和索引
-            files_with_index = [(f, i) for i, f in enumerate(files_to_rename)]
-
-            # 批量处理
-            rename_results = process_with_progress(
-                files_with_index,
-                rename_single_file,
-                "重命名文件" if not preview_only else "预览重命名",
-            )
-
-            # 统计结果
-            for rename_result in rename_results:
-                if rename_result:
-                    if rename_result["success"]:
-                        result["renamed_files"].append(rename_result)
-                        if not preview_only:
-                            result["statistics"]["renamed_count"] += 1
-                    else:
-                        result["failed_files"].append(rename_result)
-                        result["statistics"]["failed_count"] += 1
-                        result["success"] = False
-
-            if not preview_only:
-                self.operation_count += result["statistics"]["renamed_count"]
-
-            action = "预览" if preview_only else "重命名"
-            self.logger.info(f"文件{action}完成: {result['statistics']}")
-            return result
-
-        except Exception as e:
-            raise ProcessingError(f"文件重命名失败: {str(e)}")
 
     def rename_files_with_temp(
         self,
@@ -859,8 +600,6 @@ class FileProcessor(BaseProcessor):
                     )
                     result["statistics"]["failed_count"] += 1
                     result["success"] = False
-
-            self.operation_count += result["statistics"]["renamed_count"]
 
             self.logger.info(f"临时重命名完成: {result['statistics']}")
             return result
@@ -1075,8 +814,6 @@ class FileProcessor(BaseProcessor):
                     result["statistics"]["failed_count"] += 1
                     result["success"] = False
 
-            self.operation_count += result["statistics"]["renamed_count"]
-
             # 记录详细的失败信息到日志
             if result["failed_pairs"]:
                 self.logger.warning(
@@ -1098,130 +835,3 @@ class FileProcessor(BaseProcessor):
 
         except Exception as e:
             raise ProcessingError(f"同步重命名失败: {str(e)}")
-
-    def organize_files_by_extension(
-        self,
-        source_dir: str,
-        target_dir: str,
-        recursive: bool = False,
-        create_subdirs: bool = True,
-    ) -> Dict[str, Any]:
-        """按文件扩展名组织文件
-
-        Args:
-            source_dir: 源目录
-            target_dir: 目标目录
-            recursive: 是否递归处理
-            create_subdirs: 是否为每种扩展名创建子目录
-
-        Returns:
-            Dict[str, Any]: 组织结果
-        """
-        try:
-            source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
-            target_path = validate_path(target_dir, must_exist=False)
-
-            create_directory(target_path)
-
-            self.logger.info(f"开始按扩展名组织文件: {source_path} -> {target_path}")
-
-            # 获取所有文件
-            all_files = get_file_list(source_path, extensions=None, recursive=recursive)
-
-            # 按扩展名分组
-            files_by_ext = {}
-            for file_path in all_files:
-                ext = file_path.suffix.lower() or ".no_extension"
-                if ext not in files_by_ext:
-                    files_by_ext[ext] = []
-                files_by_ext[ext].append(file_path)
-
-            result = {
-                "success": True,
-                "source_dir": str(source_path),
-                "target_dir": str(target_path),
-                "extensions_found": list(files_by_ext.keys()),
-                "organized_files": [],
-                "failed_files": [],
-                "statistics": {
-                    "total_files": len(all_files),
-                    "organized_count": 0,
-                    "failed_count": 0,
-                    "extensions_count": len(files_by_ext),
-                    "total_size": 0,
-                },
-            }
-
-            # 组织文件
-            for ext, files in files_by_ext.items():
-                if create_subdirs:
-                    ext_dir = target_path / ext.lstrip(".")
-                    create_directory(ext_dir)
-                else:
-                    ext_dir = target_path
-
-                for file_path in files:
-                    try:
-                        file_size = file_path.stat().st_size
-                        target_file = ext_dir / file_path.name
-
-                        # 确保文件名唯一
-                        target_file = get_unique_filename(
-                            target_file.parent, target_file.name
-                        )
-
-                        # 移动文件
-                        move_file_safe(file_path, target_file)
-
-                        result["organized_files"].append(
-                            {
-                                "source_file": str(file_path),
-                                "target_file": str(target_file),
-                                "extension": ext,
-                                "file_size": file_size,
-                            }
-                        )
-
-                        result["statistics"]["organized_count"] += 1
-                        result["statistics"]["total_size"] += file_size
-
-                    except Exception as e:
-                        result["failed_files"].append(
-                            {"source_file": str(file_path), "error": str(e)}
-                        )
-                        result["statistics"]["failed_count"] += 1
-                        result["success"] = False
-
-            # 格式化大小信息
-            result["statistics"]["total_size_formatted"] = format_file_size(
-                result["statistics"]["total_size"]
-            )
-
-            self.operation_count += result["statistics"]["organized_count"]
-            self.total_size_processed += result["statistics"]["total_size"]
-
-            self.logger.info(f"文件组织完成: {result['statistics']}")
-            return result
-
-        except Exception as e:
-            raise ProcessingError(f"文件组织失败: {str(e)}")
-
-    def get_statistics(self) -> Dict[str, Any]:
-        """获取处理器统计信息
-
-        Returns:
-            Dict[str, Any]: 统计信息
-        """
-        return {
-            "operation_count": self.operation_count,
-            "total_size_processed": self.total_size_processed,
-            "total_size_processed_formatted": format_file_size(
-                self.total_size_processed
-            ),
-        }
-
-    def reset_statistics(self) -> None:
-        """重置统计信息"""
-        self.operation_count = 0
-        self.total_size_processed = 0
-        self.logger.info("统计信息已重置")

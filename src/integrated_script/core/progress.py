@@ -10,7 +10,6 @@ progress.py
 
 import time
 from contextlib import contextmanager
-from functools import wraps
 from typing import Any, Callable, Iterator, List, Optional
 
 try:
@@ -160,34 +159,6 @@ class ProgressManager:
         elif self.show_progress and self._total_items > 0:
             print("\n完成")
 
-    def get_progress_info(self) -> dict:
-        """获取进度信息
-
-        Returns:
-            dict: 进度信息字典
-        """
-        elapsed = time.time() - self._start_time if self._start_time else 0
-
-        info = {
-            "total_items": self._total_items,
-            "processed_items": self._processed_items,
-            "elapsed_time": elapsed,
-            "progress_percent": 0.0,
-            "items_per_second": 0.0,
-            "eta": 0.0,
-        }
-
-        if self._total_items > 0:
-            info["progress_percent"] = (self._processed_items / self._total_items) * 100
-
-        if elapsed > 0 and self._processed_items > 0:
-            info["items_per_second"] = self._processed_items / elapsed
-            if self._total_items > self._processed_items:
-                remaining_items = self._total_items - self._processed_items
-                info["eta"] = remaining_items / info["items_per_second"]
-
-        return info
-
     def __enter__(self):
         """上下文管理器入口"""
         return self
@@ -290,133 +261,3 @@ def process_with_progress(
             logger.warning(f"  ... 还有 {len(errors) - 5} 个错误")
 
     return results
-
-
-def progress_decorator(description: str = "", show_progress: bool = True):
-    """进度装饰器
-
-    为函数添加进度显示功能。
-
-    Args:
-        description: 进度描述
-        show_progress: 是否显示进度条
-
-    Example:
-        >>> @progress_decorator("处理数据")
-        ... def process_data(data_list):
-        ...     results = []
-        ...     for item in data_list:
-        ...         # 处理逻辑
-        ...         results.append(process_item(item))
-        ...     return results
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # 尝试从参数中获取可迭代对象的长度
-            total = None
-            for arg in args:
-                if hasattr(arg, "__len__"):
-                    total = len(arg)
-                    break
-
-            if total is None:
-                # 如果无法确定总数，直接执行函数
-                return func(*args, **kwargs)
-
-            with progress_context(total, description or func.__name__, show_progress):
-                return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-class ProgressCallback:
-    """进度回调类
-
-    用于在长时间运行的操作中提供进度回调。
-    """
-
-    def __init__(self, total: int, description: str = "", show_progress: bool = True):
-        """初始化进度回调
-
-        Args:
-            total: 总项目数
-            description: 描述文本
-            show_progress: 是否显示进度条
-        """
-        self.manager = ProgressManager(show_progress)
-        self.manager.create_progress_bar(total, description)
-        self._cancelled = False
-
-    def update(self, n: int = 1, description: str = None) -> bool:
-        """更新进度
-
-        Args:
-            n: 增加的项目数
-            description: 新的描述文本
-
-        Returns:
-            bool: 是否应该继续（未被取消）
-        """
-        if self._cancelled:
-            return False
-
-        self.manager.update_progress(n, description)
-        return True
-
-    def cancel(self) -> None:
-        """取消操作"""
-        self._cancelled = True
-        logger.info("进度操作被取消")
-
-    def is_cancelled(self) -> bool:
-        """检查是否已取消
-
-        Returns:
-            bool: 是否已取消
-        """
-        return self._cancelled
-
-    def finish(self) -> None:
-        """完成进度"""
-        self.manager.close_progress_bar()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        _ = (exc_type, exc_val, exc_tb)
-        self.finish()
-        return False
-
-
-# 全局进度管理器实例
-_global_progress_manager = None
-
-
-def get_global_progress_manager() -> ProgressManager:
-    """获取全局进度管理器
-
-    Returns:
-        ProgressManager: 全局进度管理器实例
-    """
-    global _global_progress_manager
-    if _global_progress_manager is None:
-        _global_progress_manager = ProgressManager()
-    return _global_progress_manager
-
-
-def set_global_progress_enabled(enabled: bool) -> None:
-    """设置全局进度显示状态
-
-    Args:
-        enabled: 是否启用进度显示
-    """
-    global _global_progress_manager
-    if _global_progress_manager is None:
-        _global_progress_manager = ProgressManager(show_progress=enabled)
-    else:
-        _global_progress_manager.show_progress = enabled

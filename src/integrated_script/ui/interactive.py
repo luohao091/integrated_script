@@ -329,129 +329,6 @@ class InteractiveInterface:
             if "error" in result:
                 print(f"错误信息: {result['error']}")
 
-    def _handle_post_ctds_validation(self, result: Dict[str, Any]) -> None:
-        """处理CTDS处理后的验证流程"""
-        detected_type = result.get("detected_dataset_type")
-        confidence = result.get("detection_confidence", 0.0)
-        output_path = result.get("output_path")
-
-        # 显示数据集类型检测结果
-        print("\n🔍 数据集类型检测:")
-        if detected_type == "detection":
-            print(f"  📋 检测到: 目标检测数据集 (置信度: {confidence:.1%})")
-            print(
-                "  💡 说明: 标签文件使用5列格式 (class_id x_center y_center width height)"
-            )
-        elif detected_type == "segmentation":
-            print(f"  🎯 检测到: 目标分割数据集 (置信度: {confidence:.1%})")
-            print("  💡 说明: 标签文件使用多列格式 (class_id x1 y1 x2 y2 ...)")
-        elif detected_type == "mixed":
-            print(f"  ⚠️ 检测到: 混合格式数据集 (置信度: {confidence:.1%})")
-            print("  💡 说明: 数据集包含检测和分割两种格式")
-        else:
-            print("  ❓ 未能确定数据集类型")
-
-        # 显示详细检测信息
-        # 优先使用预检测结果，如果没有则使用处理过程中的检测结果
-        detection_info = result.get("pre_detection_result") or result.get(
-            "dataset_type_detection", {}
-        )
-        if detection_info.get("success") and detection_info.get("statistics"):
-            det_stats = detection_info["statistics"]
-            print("\n📈 检测详情:")
-            print(
-                f"  - 分析文件数: {det_stats.get('files_analyzed', det_stats.get('total_files_analyzed', 0))}"
-            )
-            print(f"  - 总标注行数: {det_stats.get('total_lines', 0)}")
-            print(
-                f"  - 检测格式文件数: {det_stats.get('detection_files', det_stats.get('detection_lines', 0))}"
-            )
-            print(
-                f"  - 分割格式文件数: {det_stats.get('segmentation_files', det_stats.get('segmentation_lines', 0))}"
-            )
-
-        print("\n🎯 数据集类型确认")
-        print(
-            f"检测结果: {self._get_dataset_type_display_name(detected_type)} (置信度: {confidence:.1%})"
-        )
-
-        # 让用户确认数据集类型
-        if detected_type == "mixed" or confidence < 0.8:
-            print("\n⚠️ 检测置信度较低或为混合格式，请手动确认数据集类型:")
-            print("1. 目标检测数据集")
-            print("2. 目标分割数据集")
-            print("3. 跳过验证")
-
-            choice = input("\n请选择 (1-3): ").strip()
-            if choice == "1":
-                confirmed_type = "detection"
-            elif choice == "2":
-                confirmed_type = "segmentation"
-            else:
-                print("跳过数据集验证")
-                return
-        else:
-            # 高置信度，询问是否确认
-            confirm = (
-                input(
-                    f"\n确认数据集类型为 {self._get_dataset_type_display_name(detected_type)} 吗？(Y/n): "
-                )
-                .strip()
-                .lower()
-            )
-            if confirm in ["", "y", "yes"]:
-                confirmed_type = detected_type
-            else:
-                print("\n请手动选择数据集类型:")
-                print("1. 目标检测数据集")
-                print("2. 目标分割数据集")
-                print("3. 跳过验证")
-
-                choice = input("\n请选择 (1-3): ").strip()
-                if choice == "1":
-                    confirmed_type = "detection"
-                elif choice == "2":
-                    confirmed_type = "segmentation"
-                else:
-                    print("跳过数据集验证")
-                    return
-
-        # 执行相应的验证
-        print(
-            f"\n🔍 开始验证 {self._get_dataset_type_display_name(confirmed_type)} 数据集..."
-        )
-
-        try:
-            processor = self._get_processor("yolo")
-
-            if confirmed_type == "detection":
-                # 调用检测数据集验证
-                validation_result = processor.get_dataset_statistics(output_path)
-                self._display_validation_result(validation_result, "检测")
-
-            elif confirmed_type == "segmentation":
-                # 调用分割数据集验证
-                validation_result = processor.get_dataset_statistics(output_path)
-                self._display_validation_result(validation_result, "分割")
-
-                # 进行分割格式验证
-                print("\n正在检查分割标注格式...")
-                invalid_files = self._validate_segmentation_format(output_path)
-
-                if invalid_files:
-                    print(f"\n⚠️ 发现 {len(invalid_files)} 个不符合分割格式的文件")
-                    for file_path, reason in invalid_files[:5]:  # 只显示前5个
-                        print(f"  - {file_path.name}: {reason}")
-                    if len(invalid_files) > 5:
-                        print(f"  ... 还有 {len(invalid_files) - 5} 个文件")
-                else:
-                    print("✅ 所有标签文件都符合分割格式要求")
-
-            # 显示最终统计
-            self._display_final_ctds_summary(result, validation_result, confirmed_type)
-        except Exception as e:
-            print(f"❌ 验证过程出错: {e}")
-
     def _get_dataset_type_display_name(self, dataset_type: str) -> str:
         """获取数据集类型的显示名称"""
         type_names = {
@@ -545,74 +422,6 @@ class InteractiveInterface:
             ).strip()
             mapping[class_name] = english_name or class_name
         return mapping
-
-    def _display_validation_result(
-        self, result: Dict[str, Any], dataset_type_name: str
-    ) -> None:
-        """显示验证结果"""
-        print(f"\n📋 {dataset_type_name}数据集验证结果:")
-
-        if result.get("valid", False):
-            print("✅ 数据集验证通过")
-        else:
-            print("⚠️ 数据集存在问题")
-
-        stats = result.get("statistics", {})
-        print(f"  - 图像文件数: {stats.get('total_images', 0)}")
-        print(f"  - 标签文件数: {stats.get('total_labels', 0)}")
-        print(f"  - 匹配文件对: {stats.get('matched_pairs', 0)}")
-
-        if stats.get("orphaned_images", 0) > 0:
-            print(f"  - 孤立图像: {stats.get('orphaned_images', 0)}")
-        if stats.get("orphaned_labels", 0) > 0:
-            print(f"  - 孤立标签: {stats.get('orphaned_labels', 0)}")
-        if stats.get("invalid_labels", 0) > 0:
-            print(f"  - 无效标签: {stats.get('invalid_labels', 0)}")
-
-    def _display_final_ctds_summary(
-        self,
-        ctds_result: Dict[str, Any],
-        validation_result: Dict[str, Any],
-        dataset_type: str,
-    ) -> None:
-        """显示CTDS处理和验证的最终汇总"""
-        print("\n" + "=" * 60)
-        print("🎉 CTDS数据处理和验证完成汇总")
-        print("=" * 60)
-
-        print(f"📁 输出路径: {ctds_result.get('output_path')}")
-        print(f"📝 项目名称: {ctds_result.get('project_name')}")
-        print(f"🎯 数据集类型: {self._get_dataset_type_display_name(dataset_type)}")
-
-        # CTDS处理统计
-        ctds_stats = ctds_result.get("statistics", {})
-        print("\n📊 处理统计:")
-        print(f"  ✅ 成功处理: {ctds_stats.get('final_count', 0)} 个文件对")
-        print(f"  ❌ 剔除无效: {ctds_stats.get('invalid_removed', 0)} 个文件")
-
-        # 验证统计
-        val_stats = validation_result.get("statistics", {})
-        print("\n🔍 验证统计:")
-        print(f"  📷 图像文件: {val_stats.get('total_images', 0)} 个")
-        print(f"  📝 标签文件: {val_stats.get('total_labels', 0)} 个")
-        print(f"  🔗 匹配文件对: {val_stats.get('matched_pairs', 0)} 个")
-
-        # 数据集状态
-        is_valid = validation_result.get("valid", False)
-        print(f"\n🏆 数据集状态: {'✅ 可用于训练' if is_valid else '⚠️ 需要进一步处理'}")
-
-        if not is_valid:
-            issues = []
-            if val_stats.get("orphaned_images", 0) > 0:
-                issues.append(f"孤立图像 {val_stats['orphaned_images']} 个")
-            if val_stats.get("orphaned_labels", 0) > 0:
-                issues.append(f"孤立标签 {val_stats['orphaned_labels']} 个")
-            if val_stats.get("invalid_labels", 0) > 0:
-                issues.append(f"无效标签 {val_stats['invalid_labels']} 个")
-
-            if issues:
-                print(f"  ⚠️ 发现问题: {', '.join(issues)}")
-                print("  💡 建议: 使用'清理不匹配文件'功能进行清理")
 
     def _yolo_detection_statistics(self) -> None:
         """验证YOLO目标检测数据集"""
@@ -3774,11 +3583,6 @@ image:
         self.menu_system.menu_stack.clear()
         self.menu_system.current_menu = self.menu_system.main_menu
 
-    def _exit_program(self) -> None:
-        """退出程序"""
-        print("\n感谢使用集成脚本工具！")
-        sys.exit(0)
-
     # 输入辅助方法
     def _get_input(
         self,
@@ -3939,39 +3743,6 @@ image:
 
             except ValueError:
                 print("请输入有效的整数")
-
-    def _get_float_input(
-        self,
-        prompt: str,
-        default: float = None,
-        required: bool = False,
-        min_val: float = None,
-        max_val: float = None,
-    ) -> float:
-        """获取浮点数输入"""
-        while True:
-            try:
-                input_str = self._get_input(
-                    prompt, str(default) if default is not None else None, required
-                )
-
-                if not input_str and default is not None:
-                    return default
-
-                value = float(input_str)
-
-                if min_val is not None and value < min_val:
-                    print(f"值不能小于 {min_val}")
-                    continue
-
-                if max_val is not None and value > max_val:
-                    print(f"值不能大于 {max_val}")
-                    continue
-
-                return value
-
-            except ValueError:
-                print("请输入有效的数字")
 
     def _parse_size(self, size_str: str) -> tuple:
         """解析尺寸字符串"""
