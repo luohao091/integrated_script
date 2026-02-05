@@ -59,11 +59,6 @@ def build_exe():
         "tqdm",
         "logging.handlers",
         "logging.config",
-        "argparse",
-        "pathlib",
-        "json",
-        "datetime",
-        "typing",
     ]
 
     collect_args = [
@@ -93,13 +88,14 @@ def build_exe():
         "--noconfirm",
         "--onefile",
         "--console",
-        # "--strip",
+        "--strip" if os.name != "nt" else "",
         "--name=integrated_script",
         "--distpath",
         str(project_root / "dist"),
         "--workpath",
         str(project_root / "build"),
     ]
+    cmd_parts = [part for part in cmd_parts if part]
     if clean_enabled:
         cmd_parts.append("--clean")
     cmd_parts += upx_args
