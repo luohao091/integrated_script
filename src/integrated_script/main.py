@@ -5,10 +5,9 @@ main.py
 
 主程序入口
 
-提供命令行和交互式两种运行模式。
+提供交互式运行模式与打包入口。
 """
 
-import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -16,28 +15,25 @@ from typing import List, Optional
 
 from .config import ConfigManager
 from .core.logging_config import get_logger, setup_logging
-from .ui.cli import CLIInterface
 from .ui.interactive import InteractiveInterface
 
 
-def setup_argument_parser() -> argparse.ArgumentParser:
+def setup_argument_parser():
     """设置命令行参数解析器
 
     Returns:
         argparse.ArgumentParser: 配置好的参数解析器
     """
+    import argparse
+
     parser = argparse.ArgumentParser(
         prog="integrated_script",
-        description="集成脚本工具 - 提供YOLO数据集处理、图像处理、文件管理等功能",
+        description="集成脚本工具 - 提供图像处理、数据集处理等功能",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例用法:
-  %(prog)s --interactive                    # 启动交互式界面
-  %(prog)s yolo validate /path/to/dataset   # 验证YOLO数据集
-  %(prog)s image convert /path/to/images    # 转换图像格式
-  %(prog)s file organize /path/to/files     # 组织文件
-  %(prog)s dataset split /path/to/dataset   # 分割数据集
-  %(prog)s label create /path/to/images     # 创建标签文件
+  %(prog)s                                  # 启动交互式界面
+  %(prog)s --build                          # 调用打包脚本
 
 更多信息请访问: https://github.com/your-repo/integrated_script
         """,
@@ -57,8 +53,6 @@ def setup_argument_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--log-file", type=str, help="日志文件路径")
 
-    parser.add_argument("--interactive", action="store_true", help="启动交互式界面")
-
     parser.add_argument("--no-color", action="store_true", help="禁用彩色输出")
 
     parser.add_argument("--quiet", action="store_true", help="静默模式，减少输出")
@@ -69,22 +63,10 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         "--build", action="store_true", help="调用根目录的build_exe.py进行打包"
     )
 
-    # 创建子命令解析器
-    subparsers = parser.add_subparsers(
-        dest="command",
-        title="可用命令",
-        description="选择要执行的操作类型",
-        help='使用 "%(prog)s <command> --help" 查看具体命令的帮助信息',
-    )
-
-    # 添加CLI接口的子命令
-    cli = CLIInterface()
-    cli.setup_parsers(subparsers)
-
     return parser
 
 
-def setup_logging_from_args(args: argparse.Namespace) -> None:
+def setup_logging_from_args(args) -> None:
     """根据命令行参数设置日志
 
     Args:
@@ -106,7 +88,7 @@ def setup_logging_from_args(args: argparse.Namespace) -> None:
     setup_logging(log_dir=log_dir, log_level=log_level, enable_error_file=True)
 
 
-def load_config_from_args(args: argparse.Namespace) -> ConfigManager:
+def load_config_from_args(args) -> ConfigManager:
     """根据命令行参数加载配置
 
     Args:
@@ -149,28 +131,6 @@ def run_interactive_mode(config_manager: ConfigManager) -> int:
     except Exception as e:
         logger = get_logger(__name__)
         logger.error(f"交互式模式运行失败: {e}")
-        return 1
-
-
-def run_cli_mode(args: argparse.Namespace, config_manager: ConfigManager) -> int:
-    """运行命令行模式
-
-    Args:
-        args: 命令行参数
-        config_manager: 配置管理器
-
-    Returns:
-        int: 退出代码
-    """
-    try:
-        cli = CLIInterface(config_manager)
-        return cli.run(args)
-    except KeyboardInterrupt:
-        print("\n\n程序被用户中断")
-        return 130
-    except Exception as e:
-        logger = get_logger(__name__)
-        logger.error(f"命令行模式运行失败: {e}")
         return 1
 
 
@@ -263,15 +223,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         # 加载配置
         config_manager = load_config_from_args(args)
 
-        # 根据参数选择运行模式
-        if args.interactive or not args.command:
-            # 交互式模式
-            logger.info("启动交互式模式")
-            return run_interactive_mode(config_manager)
-        else:
-            # 命令行模式
-            logger.info(f"执行命令: {args.command}")
-            return run_cli_mode(args, config_manager)
+        # 交互式模式
+        logger.info("启动交互式模式")
+        return run_interactive_mode(config_manager)
 
     except Exception as e:
         logger.error(f"程序运行失败: {e}")

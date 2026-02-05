@@ -80,26 +80,7 @@ pip install pyinstaller
 
 ```bash
 # 启动交互式界面
-python main.py --interactive
-```
-
-### 命令行模式
-
-```bash
-# YOLO数据集验证
-python main.py yolo validate /path/to/dataset
-
-# 图像格式转换
-python main.py image convert /path/to/images
-
-# 文件组织
-python main.py file organize /path/to/files
-
-# 数据集分割
-python main.py dataset split /path/to/dataset
-
-# 创建标签文件
-python main.py label create /path/to/images
+python main.py
 ```
 
 ### 可执行文件使用
@@ -108,9 +89,7 @@ python main.py label create /path/to/images
 
 ```cmd
 # Windows 命令行
-integrated_script.exe --help
-integrated_script.exe yolo validate /path/to/dataset
-integrated_script.exe image convert /path/to/images
+integrated_script.exe
 ```
 
 ### 配置文件
@@ -120,7 +99,7 @@ integrated_script.exe image convert /path/to/images
 ## 💡 技术特点
 
 - **模块化设计** - 清晰的架构，易于扩展和维护
-- **双模式操作** - 支持命令行和交互式界面
+- **交互式操作** - 以交互式界面为主
 - **跨平台兼容** - 特别优化了Windows系统兼容性
 - **进度可视化** - 内置进度条和日志系统
 - **配置灵活** - 支持YAML配置文件自定义
