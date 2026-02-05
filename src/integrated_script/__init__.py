@@ -11,10 +11,6 @@ Modules:
     processors: 各种数据处理器
     ui: 用户界面和交互
 
-Example:
-    >>> from integrated_script import IntegratedProcessor
-    >>> processor = IntegratedProcessor()
-    >>> processor.run()
 """
 
 __version__ = "1.0.0"
@@ -45,8 +41,3 @@ __all__ = [
 ]
 
 # 包级别的配置
-DEFAULT_CONFIG = {
-    "version": __version__,
-    "debug": False,
-    "log_level": "INFO",
-}

@@ -17,7 +17,6 @@ from ..config.exceptions import ProcessingError, UserInterruptError, ValidationE
 from ..config.settings import ConfigManager
 from ..core.logging_config import get_logger, setup_logging
 from ..processors import (
-    DatasetProcessor,
     FileProcessor,
     ImageProcessor,
     LabelProcessor,
@@ -53,7 +52,6 @@ class InteractiveInterface:
             "yolo": None,
             "image": None,
             "file": None,
-            "dataset": None,
             "label": None,
         }
 
@@ -95,10 +93,6 @@ class InteractiveInterface:
                     )
                 elif processor_type == "file":
                     self.processors[processor_type] = FileProcessor(
-                        config=self.config_manager
-                    )
-                elif processor_type == "dataset":
-                    self.processors[processor_type] = DatasetProcessor(
                         config=self.config_manager
                     )
                 elif processor_type == "label":
@@ -2708,200 +2702,6 @@ class InteractiveInterface:
             input()
         except Exception as e:
             print(f"\n删除JSON文件失败: {e}")
-
-        self._pause()
-
-    def _dataset_menu(self) -> None:
-        """数据集处理菜单"""
-        menu = {
-            "title": "数据集处理",
-            "options": [
-                ("分割数据集", self._dataset_split),
-                ("验证数据集", self._dataset_validate),
-                ("验证分割数据集", self._dataset_validate_segmentation),
-                ("分析数据集", self._dataset_analyze),
-                ("清理数据集", self._dataset_clean),
-                ("返回主菜单", None),
-            ],
-        }
-
-        self.menu_system.show_menu(menu)
-
-    def _dataset_split(self) -> None:
-        """分割数据集"""
-        try:
-            print("\n=== 分割数据集 ===")
-
-            dataset_path = self._get_path_input(
-                "请输入数据集路径: ", must_exist=True, must_be_dir=True
-            )
-            output_dir = self._get_input("输出目录 (可选): ")
-
-            print("\n支持的格式: yolo, coco, pascal_voc")
-            dataset_format = self._get_input(
-                "数据集格式 (默认: yolo): ", default="yolo"
-            )
-
-            train_ratio = self._get_float_input(
-                "训练集比例 (默认: 0.8): ", default=0.8, min_val=0.1, max_val=0.9
-            )
-            val_ratio = self._get_float_input(
-                "验证集比例 (默认: 0.1): ", default=0.1, min_val=0.0, max_val=0.5
-            )
-            test_ratio = self._get_float_input(
-                "测试集比例 (默认: 0.1): ", default=0.1, min_val=0.0, max_val=0.5
-            )
-
-            # 检查比例总和
-            total_ratio = train_ratio + val_ratio + test_ratio
-            if abs(total_ratio - 1.0) > 0.001:
-                print(f"\n警告: 比例总和为 {total_ratio:.3f}，将自动调整")
-
-            processor = self._get_processor("dataset")
-
-            print("\n正在分割数据集...")
-            result = processor.split_dataset(
-                dataset_path,
-                output_path=output_dir if output_dir else None,
-                train_ratio=train_ratio,
-                val_ratio=val_ratio,
-                test_ratio=test_ratio,
-                dataset_format=dataset_format,
-            )
-
-            self._display_result(result)
-
-        except UserInterruptError:
-            pass
-        except Exception as e:
-            print(f"\n数据集分割失败: {e}")
-
-        self._pause()
-
-    def _dataset_validate(self) -> None:
-        """验证数据集"""
-        try:
-            print("\n=== 验证数据集 ===")
-
-            dataset_path = self._get_path_input(
-                "请输入数据集路径: ", must_exist=True, must_be_dir=True
-            )
-
-            print("\n支持的格式: yolo, coco, pascal_voc")
-            dataset_format = self._get_input(
-                "数据集格式 (默认: yolo): ", default="yolo"
-            )
-
-            processor = self._get_processor("dataset")
-
-            print("\n正在验证数据集...")
-            result = processor.get_dataset_statistics(dataset_path)
-
-            self._display_result(result)
-
-        except UserInterruptError:
-            print(f"\n删除失败: 用户中断操作 (Code: USER_INTERRUPT)")
-            print("\n按回车键继续...")
-            input()
-        except Exception as e:
-            print(f"\n恢复失败: {e}")
-
-        self._pause()
-
-    def _dataset_analyze(self) -> None:
-        """分析数据集"""
-        try:
-            print("\n=== 分析数据集 ===")
-
-            dataset_path = self._get_path_input(
-                "请输入数据集路径: ", must_exist=True, must_be_dir=True
-            )
-
-            print("\n支持的格式: yolo, coco, pascal_voc")
-            dataset_format = self._get_input(
-                "数据集格式 (默认: yolo): ", default="yolo"
-            )
-
-            output_file = self._get_input("分析结果输出文件 (可选): ")
-
-            processor = self._get_processor("dataset")
-
-            print("\n正在分析数据集...")
-            result = processor.analyze_dataset(
-                dataset_path,
-                dataset_format=dataset_format,
-                output_file=output_file if output_file else None,
-            )
-
-            self._display_result(result)
-
-        except UserInterruptError:
-            print(f"\n转换失败: 用户中断操作 (Code: USER_INTERRUPT)")
-            print("\n按回车键继续...")
-            input()
-        except Exception as e:
-            print(f"\n分析失败: {e}")
-
-        self._pause()
-
-    def _dataset_validate_segmentation(self) -> None:
-        """验证分割数据集"""
-        try:
-            print("\n=== 验证分割数据集 ===")
-            print("分割数据集要求每个标签文件至少有7列（类别 + 至少4个分割点坐标）")
-
-            dataset_path = self._get_path_input(
-                "请输入分割数据集路径: ", must_exist=True, must_be_dir=True
-            )
-
-            # 询问是否移动无效文件
-            move_invalid = self._get_yes_no_input(
-                "是否移动无效文件到上级目录? (y/n, 默认: y): ", default=True
-            )
-
-            custom_dir_name = None
-            if move_invalid:
-                custom_dir_name = self._get_input("自定义无效文件目录名称 (可选): ")
-                if not custom_dir_name:
-                    custom_dir_name = None
-
-            # 导入分割验证器
-            try:
-                import os
-                import sys
-
-                # 添加项目根目录到路径
-                project_root = os.path.dirname(
-                    os.path.dirname(os.path.dirname(__file__))
-                )
-                if project_root not in sys.path:
-                    sys.path.insert(0, project_root)
-
-                from test_segmentation_dataset_validation import (
-                    SegmentationDatasetValidator,
-                )
-
-                validator = SegmentationDatasetValidator()
-
-                print("\n正在验证分割数据集...")
-                result = validator.validate_and_clean_dataset(
-                    dataset_path=dataset_path,
-                    move_invalid=move_invalid,
-                    custom_invalid_dir_name=custom_dir_name,
-                )
-
-                self._display_result(result)
-
-            except ImportError as e:
-                print(f"\n导入分割验证器失败: {e}")
-                print("请确保 test_segmentation_dataset_validation.py 文件存在")
-
-        except UserInterruptError:
-            print(f"\n分析失败: 用户中断操作 (Code: USER_INTERRUPT)")
-            print("\n按回车键继续...")
-            input()
-        except Exception as e:
-            print(f"\n分割数据集验证失败: {e}")
 
         self._pause()
 
