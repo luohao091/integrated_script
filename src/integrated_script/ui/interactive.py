@@ -117,8 +117,6 @@ class InteractiveInterface:
                 ("YOLO数据转CTDS格式", self._yolo_convert_to_ctds),
                 ("YOLO数据转X-label", self._yolo_convert_to_xlabel_auto),
                 ("X-label数据转YOLO", self._yolo_process_xlabel_auto),
-                # ("X-label数据转YOLO-检测格式", self._yolo_process_xlabel),
-                # ("X-label数据转YOLO-分割格式", self._yolo_process_xlabel_segmentation),
                 ("目标检测数据集验证", self._yolo_detection_statistics),
                 ("目标分割数据集验证", self._yolo_segmentation_statistics),
                 ("清理不匹配文件", self._yolo_clean_unmatched),
@@ -320,94 +318,6 @@ class InteractiveInterface:
             self._display_result(result)
         except Exception as e:
             print(f"\nX-label自动识别转换失败: {e}")
-
-        self._pause()
-
-    def _yolo_process_xlabel(self) -> None:
-        """X-label数据转YOLO格式"""
-        try:
-            print("\n=== X-label数据转YOLO格式 ===")
-            print("此功能将Labelme/X-label JSON转换为YOLO目标检测格式：")
-            print("- 自动扫描类别")
-            print("- 支持用户调整类别顺序（class_id）")
-            print("- 生成images/labels目录与classes.txt")
-
-            dataset_path = self._get_path_input(
-                "请输入X-label数据集路径: ", must_exist=True
-            )
-            output_path = self._get_input(
-                "请输入输出目录（留空自动生成）: ", required=False
-            ).strip()
-            if not output_path:
-                output_path = None
-
-            processor = self._get_processor("yolo")
-
-            classes = processor.detect_xlabel_classes(dataset_path)
-            if not classes:
-                print("\n❌ 未检测到任何类别")
-                self._pause()
-                return
-
-            final_classes = self._get_class_order_from_user(list(classes))
-
-            print("\n✅ 最终类别与ID映射：")
-            for i, c in enumerate(final_classes):
-                print(f"  {i}: {c}")
-
-            print("\n正在转换X-label数据集...")
-            result = processor.convert_xlabel_to_yolo(
-                dataset_path, output_dir=output_path, class_order=final_classes
-            )
-
-            self._display_result(result)
-        except Exception as e:
-            print(f"\nX-label数据转YOLO失败: {e}")
-
-        self._pause()
-
-    def _yolo_process_xlabel_segmentation(self) -> None:
-        """X-label数据转YOLO-分割格式"""
-        try:
-            print("\n=== X-label数据转YOLO-分割格式 ===")
-            print("此功能将Labelme/X-label JSON转换为YOLO分割格式：")
-            print("- 自动扫描类别")
-            print("- 支持用户调整类别顺序（class_id）")
-            print("- 生成images/labels目录与classes.txt")
-
-            dataset_path = self._get_path_input(
-                "请输入X-label数据集路径: ", must_exist=True
-            )
-            output_path = self._get_input(
-                "请输入输出目录（留空自动生成）: ", required=False
-            ).strip()
-            if not output_path:
-                output_path = None
-
-            processor = self._get_processor("yolo")
-
-            classes = processor.detect_xlabel_segmentation_classes(dataset_path)
-            if not classes:
-                print("\n❌ 未检测到任何类别")
-                self._pause()
-                return
-
-            final_classes = self._get_class_order_from_user(list(classes))
-
-            print("\n✅ 最终类别与ID映射：")
-            for i, c in enumerate(final_classes):
-                print(f"  {i}: {c}")
-
-            print("\n正在转换X-label分割数据集...")
-            result = processor.convert_xlabel_to_yolo_segmentation(
-                dataset_path,
-                output_dir=output_path,
-                class_order=final_classes,
-            )
-
-            self._display_result(result)
-        except Exception as e:
-            print(f"\nX-label转YOLO-分割失败: {e}")
 
         self._pause()
 

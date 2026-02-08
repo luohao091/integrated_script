@@ -17,7 +17,7 @@
 - CTDS 数据集转 YOLO（自动检测数据集类型并验证）
 - YOLO 数据集转 CTDS（生成 `obj.names` + `obj_train_data` 结构）
 - YOLO 数据集转 X-label（自动识别检测/分割）
-- X-label/Labelme JSON 转 YOLO（自动识别 / 检测 / 分割）
+- X-label/Labelme JSON 转 YOLO（自动识别检测/分割）
 - 目标检测数据集验证（自动定位根目录）
 - 目标分割数据集验证（含分割格式检查与无效标签处理）
 - 清理不匹配文件（支持试运行）
