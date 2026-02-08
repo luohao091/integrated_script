@@ -45,7 +45,8 @@ integrated-script --build
 
 - YOLO 数据集处理
   - CTDS 转 YOLO / YOLO 转 CTDS
-  - X-label 转 YOLO（检测/分割）
+  - YOLO 转 X-label（自动识别检测/分割）
+  - X-label 转 YOLO（自动识别/检测/分割）
   - 目标检测/分割数据集验证
   - 清理不匹配文件（支持试运行）
   - 合并多个数据集（同类型/不同类型）

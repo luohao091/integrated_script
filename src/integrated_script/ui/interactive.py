@@ -115,8 +115,10 @@ class InteractiveInterface:
             "options": [
                 ("CTDS数据转YOLO格式", self._yolo_process_ctds),
                 ("YOLO数据转CTDS格式", self._yolo_convert_to_ctds),
-                ("X-label数据转YOLO-检测格式", self._yolo_process_xlabel),
-                ("X-label数据转YOLO-分割格式", self._yolo_process_xlabel_segmentation),
+                ("YOLO数据转X-label", self._yolo_convert_to_xlabel_auto),
+                ("X-label数据转YOLO", self._yolo_process_xlabel_auto),
+                # ("X-label数据转YOLO-检测格式", self._yolo_process_xlabel),
+                # ("X-label数据转YOLO-分割格式", self._yolo_process_xlabel_segmentation),
                 ("目标检测数据集验证", self._yolo_detection_statistics),
                 ("目标分割数据集验证", self._yolo_segmentation_statistics),
                 ("清理不匹配文件", self._yolo_clean_unmatched),
@@ -214,6 +216,113 @@ class InteractiveInterface:
 
         self._pause()
 
+    def _yolo_convert_to_xlabel_auto(self) -> None:
+        """YOLO数据转X-label（自动识别检测/分割）"""
+        try:
+            print("\n=== YOLO数据转X-label（自动识别） ===")
+            print("此功能将YOLO数据集转换为X-label/Labelme JSON格式：")
+            print("- 自动判断检测/分割")
+            print("- 生成同名JSON与图片文件")
+
+            dataset_path = self._get_path_input(
+                "请输入YOLO数据集路径: ", must_exist=True
+            )
+            output_path = self._get_input(
+                "请输入输出目录（留空自动生成）: ", required=False
+            ).strip()
+            if not output_path:
+                output_path = None
+
+            processor = self._get_processor("yolo")
+            detection = processor.detect_yolo_dataset_type(dataset_path)
+            detected_type = detection.get("detected_type", "unknown")
+            confidence = float(detection.get("confidence", 0.0))
+            stats = detection.get("statistics", {})
+
+            if detected_type == "unknown":
+                print("\n❌ 未检测到有效标签，无法自动判断数据集类型")
+                self._pause()
+                return
+
+            print("\n🔍 识别结果:")
+            print(f"  类型: {self._get_dataset_type_display_name(detected_type)}")
+            print(f"  置信度: {confidence:.1%}")
+            print(f"  标签文件: {stats.get('total_files', 0)}")
+            print(f"  检测文件: {stats.get('detection_files', 0)}")
+            print(f"  分割文件: {stats.get('segmentation_files', 0)}")
+
+            confirmed_type = self._get_user_confirmed_type(detected_type, confidence)
+            if not confirmed_type:
+                self._pause()
+                return
+
+            if confirmed_type == "segmentation":
+                print("\n正在转换为X-label分割格式...")
+                result = processor.convert_yolo_to_xlabel_segmentation(
+                    dataset_path, output_dir=output_path
+                )
+            else:
+                print("\n正在转换为X-label检测格式...")
+                result = processor.convert_yolo_to_xlabel(
+                    dataset_path, output_dir=output_path
+                )
+
+            self._display_result(result)
+        except Exception as e:
+            print(f"\nYOLO转X-label失败: {e}")
+
+        self._pause()
+
+    def _yolo_process_xlabel_auto(self) -> None:
+        """X-label数据转YOLO（自动识别检测/分割）"""
+        try:
+            print("\n=== X-label数据转YOLO（自动识别） ===")
+            print("此功能将Labelme/X-label JSON自动识别为检测或分割格式：")
+            print("- 自动扫描类别")
+            print("- 自动判断检测/分割")
+            print("- 支持用户确认或切换类型")
+
+            dataset_path = self._get_path_input(
+                "请输入X-label数据集路径: ", must_exist=True
+            )
+            output_path = self._get_input(
+                "请输入输出目录（留空自动生成）: ", required=False
+            ).strip()
+            if not output_path:
+                output_path = None
+
+            processor = self._get_processor("yolo")
+            detection = processor.detect_xlabel_dataset_type(dataset_path)
+            detected_type = detection.get("detected_type", "unknown")
+            confidence = float(detection.get("confidence", 0.0))
+            stats = detection.get("statistics", {})
+
+            if detected_type == "unknown":
+                print("\n❌ 未检测到有效标注，无法自动判断数据集类型")
+                self._pause()
+                return
+
+            print("\n🔍 识别结果:")
+            print(f"  类型: {self._get_dataset_type_display_name(detected_type)}")
+            print(f"  置信度: {confidence:.1%}")
+            print(f"  标注数: {stats.get('total_shapes', 0)}")
+            print(f"  检测倾向: {stats.get('detection_like', 0)}")
+            print(f"  分割倾向: {stats.get('segmentation_like', 0)}")
+
+            confirmed_type = self._get_user_confirmed_type(detected_type, confidence)
+            if not confirmed_type:
+                self._pause()
+                return
+
+            result = self._run_xlabel_conversion(
+                dataset_path, output_path, confirmed_type
+            )
+            self._display_result(result)
+        except Exception as e:
+            print(f"\nX-label自动识别转换失败: {e}")
+
+        self._pause()
+
     def _yolo_process_xlabel(self) -> None:
         """X-label数据转YOLO格式"""
         try:
@@ -283,7 +392,6 @@ class InteractiveInterface:
                 self._pause()
                 return
 
-            english_mapping = self._get_english_name_mapping(list(classes))
             final_classes = self._get_class_order_from_user(list(classes))
 
             print("\n✅ 最终类别与ID映射：")
@@ -295,7 +403,6 @@ class InteractiveInterface:
                 dataset_path,
                 output_dir=output_path,
                 class_order=final_classes,
-                english_name_mapping=english_mapping,
             )
 
             self._display_result(result)
@@ -303,6 +410,48 @@ class InteractiveInterface:
             print(f"\nX-label转YOLO-分割失败: {e}")
 
         self._pause()
+
+    def _run_xlabel_conversion(
+        self,
+        dataset_path: str,
+        output_path: Optional[str],
+        mode: str,
+    ) -> Dict[str, Any]:
+        """执行X-label转换（检测/分割）"""
+        processor = self._get_processor("yolo")
+
+        if mode == "segmentation":
+            classes = processor.detect_xlabel_segmentation_classes(dataset_path)
+            if not classes:
+                raise ValueError("未检测到任何类别")
+
+            final_classes = self._get_class_order_from_user(list(classes))
+
+            print("\n✅ 最终类别与ID映射：")
+            for i, c in enumerate(final_classes):
+                print(f"  {i}: {c}")
+
+            print("\n正在转换X-label分割数据集...")
+            return processor.convert_xlabel_to_yolo_segmentation(
+                dataset_path,
+                output_dir=output_path,
+                class_order=final_classes,
+            )
+
+        classes = processor.detect_xlabel_classes(dataset_path)
+        if not classes:
+            raise ValueError("未检测到任何类别")
+
+        final_classes = self._get_class_order_from_user(list(classes))
+
+        print("\n✅ 最终类别与ID映射：")
+        for i, c in enumerate(final_classes):
+            print(f"  {i}: {c}")
+
+        print("\n正在转换X-label数据集...")
+        return processor.convert_xlabel_to_yolo(
+            dataset_path, output_dir=output_path, class_order=final_classes
+        )
 
     def _display_ctds_result(self, result: Dict[str, Any]) -> None:
         """显示CTDS处理结果"""
@@ -411,17 +560,6 @@ class InteractiveInterface:
         except Exception as e:
             print(f"❌ 输入非法（{e}），使用默认顺序")
             return default
-
-    def _get_english_name_mapping(self, classes: List[str]) -> Dict[str, str]:
-        """获取类别英文名称映射"""
-        mapping: Dict[str, str] = {}
-        print("\n检测到以下类别，请为每个类别输入对应的英文名称：")
-        for class_name in sorted(classes):
-            english_name = self._get_input(
-                f"请输入 '{class_name}' 的英文名称: ", required=False
-            ).strip()
-            mapping[class_name] = english_name or class_name
-        return mapping
 
     def _yolo_detection_statistics(self) -> None:
         """验证YOLO目标检测数据集"""

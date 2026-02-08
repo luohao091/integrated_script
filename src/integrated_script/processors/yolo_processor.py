@@ -373,6 +373,156 @@ class YOLOProcessor(DatasetProcessor):
 
         return classes
 
+    def detect_xlabel_dataset_type(self, source_dir: str) -> Dict[str, Any]:
+        """检测X-label数据集类型（检测/分割/混合）"""
+        source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
+
+        total_shapes = 0
+        detection_like = 0
+        segmentation_like = 0
+
+        for root, dirs, files in os.walk(source_path):
+            root_path = Path(root)
+            if root_path.name.endswith("_dataset"):
+                dirs[:] = []
+                continue
+
+            for filename in files:
+                if not filename.lower().endswith(".json"):
+                    continue
+                json_path = root_path / filename
+                try:
+                    with json_path.open("r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    for shape in data.get("shapes", []):
+                        points = shape.get("points", [])
+                        shape_type = (shape.get("shape_type") or "").lower()
+                        if not points:
+                            continue
+
+                        total_shapes += 1
+
+                        if shape_type in {"rectangle", "rect", "box"}:
+                            detection_like += 1
+                            continue
+
+                        if shape_type in {"polygon", "polyline", "linestrip"}:
+                            segmentation_like += 1
+                            continue
+
+                        if len(points) >= 3:
+                            # 兜底：识别可能的矩形（4点且仅2个不同x/y）
+                            if len(points) == 4:
+                                xs = {p[0] for p in points}
+                                ys = {p[1] for p in points}
+                                if len(xs) == 2 and len(ys) == 2:
+                                    detection_like += 1
+                                    continue
+                            segmentation_like += 1
+                        else:
+                            detection_like += 1
+                except Exception as e:
+                    self.logger.warning(f"读取JSON失败 {json_path}: {e}")
+
+        if total_shapes == 0:
+            detected_type = "unknown"
+            confidence = 0.0
+        elif detection_like > 0 and segmentation_like > 0:
+            detected_type = "mixed"
+            confidence = max(detection_like, segmentation_like) / total_shapes
+        elif segmentation_like > 0:
+            detected_type = "segmentation"
+            confidence = segmentation_like / total_shapes
+        else:
+            detected_type = "detection"
+            confidence = detection_like / total_shapes
+
+        return {
+            "detected_type": detected_type,
+            "confidence": confidence,
+            "statistics": {
+                "total_shapes": total_shapes,
+                "detection_like": detection_like,
+                "segmentation_like": segmentation_like,
+            },
+        }
+
+    def detect_yolo_dataset_type(self, dataset_path: str) -> Dict[str, Any]:
+        """检测YOLO数据集类型（检测/分割/混合）"""
+        dataset_dir = validate_path(dataset_path, must_exist=True, must_be_dir=True)
+        dataset_dir = self._detect_dataset_root(dataset_dir)
+
+        labels_dir = dataset_dir / "labels"
+        if not labels_dir.exists():
+            raise DatasetError(
+                "未找到labels目录", dataset_path=str(dataset_dir)
+            )
+
+        label_files = list(labels_dir.glob("*.txt"))
+        if not label_files:
+            return {
+                "detected_type": "unknown",
+                "confidence": 0.0,
+                "statistics": {
+                    "total_files": 0,
+                    "detection_files": 0,
+                    "segmentation_files": 0,
+                },
+            }
+
+        sample_size = min(100, len(label_files))
+        sample_files = random.sample(label_files, sample_size)
+
+        detection_files = 0
+        segmentation_files = 0
+
+        for label_file in sample_files:
+            try:
+                with label_file.open("r", encoding="utf-8") as f:
+                    lines = [line.strip() for line in f if line.strip()]
+                if not lines:
+                    continue
+
+                detection_lines = 0
+                segmentation_lines = 0
+                for line in lines:
+                    parts = line.split()
+                    if len(parts) == 5:
+                        detection_lines += 1
+                    else:
+                        segmentation_lines += 1
+
+                if detection_lines >= segmentation_lines:
+                    detection_files += 1
+                else:
+                    segmentation_files += 1
+            except Exception as e:
+                self.logger.warning(f"分析标签失败 {label_file}: {e}")
+
+        total = detection_files + segmentation_files
+        if total == 0:
+            detected_type = "unknown"
+            confidence = 0.0
+        elif detection_files > 0 and segmentation_files > 0:
+            detected_type = "mixed"
+            confidence = max(detection_files, segmentation_files) / total
+        elif segmentation_files > 0:
+            detected_type = "segmentation"
+            confidence = segmentation_files / total
+        else:
+            detected_type = "detection"
+            confidence = detection_files / total
+
+        return {
+            "detected_type": detected_type,
+            "confidence": confidence,
+            "statistics": {
+                "total_files": len(label_files),
+                "detection_files": detection_files,
+                "segmentation_files": segmentation_files,
+            },
+        }
+
     def detect_xlabel_segmentation_classes(self, source_dir: str) -> Set[str]:
         """扫描X-label分割JSON中的类别名称（按脚本规则）"""
         source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
@@ -550,7 +700,7 @@ class YOLOProcessor(DatasetProcessor):
 
                             class_id = class_mapping[label]
                             f.write(
-                                f"{class_id} {x:.6f} {y:.6f} {w:.6f} {h:.6f}\n"
+                                f"{class_id} {x:.10f} {y:.10f} {w:.10f} {h:.10f}\n"
                             )
 
                     result["statistics"]["converted"] += 1
@@ -573,7 +723,6 @@ class YOLOProcessor(DatasetProcessor):
         source_dir: str,
         output_dir: Optional[str] = None,
         class_order: Optional[List[str]] = None,
-        english_name_mapping: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """X-label数据转YOLO分割格式（基于Labelme JSON）"""
         source_path = validate_path(source_dir, must_exist=True, must_be_dir=True)
@@ -715,7 +864,7 @@ class YOLOProcessor(DatasetProcessor):
                                 continue
 
                             class_id = class_mapping[label]
-                            coords_str = " ".join(f"{v:.6f}" for v in coords)
+                            coords_str = " ".join(f"{v:.10f}" for v in coords)
                             f.write(f"{class_id} {coords_str}\n")
 
                     result["statistics"]["converted"] += 1
@@ -729,12 +878,187 @@ class YOLOProcessor(DatasetProcessor):
         classes_path = output_path / self.classes_file
         with classes_path.open("w", encoding="utf-8") as f:
             for cls in final_classes:
-                english_name = (
-                    english_name_mapping.get(cls, cls)
-                    if english_name_mapping
-                    else cls
-                )
-                f.write(f"{english_name}\n")
+                f.write(f"{cls}\n")
+
+        return result
+
+    def convert_yolo_to_xlabel(
+        self, dataset_path: str, output_dir: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """YOLO检测数据集转X-label格式"""
+        return self._convert_yolo_to_xlabel(dataset_path, output_dir, mode="detection")
+
+    def convert_yolo_to_xlabel_segmentation(
+        self, dataset_path: str, output_dir: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """YOLO分割数据集转X-label格式"""
+        return self._convert_yolo_to_xlabel(
+            dataset_path, output_dir, mode="segmentation"
+        )
+
+    def _convert_yolo_to_xlabel(
+        self, dataset_path: str, output_dir: Optional[str], mode: str
+    ) -> Dict[str, Any]:
+        dataset_dir = validate_path(dataset_path, must_exist=True, must_be_dir=True)
+        dataset_dir = self._detect_dataset_root(dataset_dir)
+
+        images_dir = dataset_dir / "images"
+        labels_dir = dataset_dir / "labels"
+        if not images_dir.exists():
+            raise DatasetError("未找到images目录", dataset_path=str(dataset_dir))
+        if not labels_dir.exists():
+            raise DatasetError("未找到labels目录", dataset_path=str(dataset_dir))
+
+        if output_dir:
+            output_path = Path(output_dir)
+        else:
+            output_path = dataset_dir.parent / f"{dataset_dir.name}_xlabel"
+        create_directory(output_path)
+
+        # 读取类别文件
+        classes_file = dataset_dir / self.classes_file
+        class_names: List[str] = []
+        if classes_file.exists():
+            with classes_file.open("r", encoding="utf-8") as f:
+                class_names = [line.strip() for line in f if line.strip()]
+
+        image_files = get_file_list(images_dir, self.image_extensions, recursive=False)
+
+        result = {
+            "success": True,
+            "input_path": str(dataset_dir),
+            "output_path": str(output_path),
+            "mode": mode,
+            "statistics": {
+                "total_images": len(image_files),
+                "converted": 0,
+                "missing_labels": 0,
+                "missing_images": 0,
+                "errors": 0,
+            },
+        }
+
+        def class_name_from_id(class_id: int) -> str:
+            if 0 <= class_id < len(class_names):
+                return class_names[class_id]
+            return f"class_{class_id}"
+
+        def load_image_size(image_path: Path) -> Tuple[int, int]:
+            from PIL import Image
+
+            with Image.open(image_path) as img:
+                return img.size  # (width, height)
+
+        def clamp(value: float, min_value: float, max_value: float) -> float:
+            return max(min_value, min(max_value, value))
+
+        with progress_context(len(image_files), "YOLO转X-label") as progress:
+            for img_path in image_files:
+                try:
+                    base_name = img_path.stem
+                    label_path = labels_dir / f"{base_name}{self.label_extension}"
+
+                    if not label_path.exists():
+                        result["statistics"]["missing_labels"] += 1
+                        progress.update_progress(1)
+                        continue
+
+                    img_w, img_h = load_image_size(img_path)
+
+                    shapes: List[Dict[str, Any]] = []
+                    with label_path.open("r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            parts = line.split()
+                            if len(parts) < 5:
+                                continue
+
+                            try:
+                                class_id = int(float(parts[0]))
+                            except ValueError:
+                                continue
+
+                            label = class_name_from_id(class_id)
+
+                            if mode == "detection":
+                                if len(parts) != 5:
+                                    continue
+                                x_center, y_center, width, height = map(
+                                    float, parts[1:5]
+                                )
+                                xmin = (x_center - width / 2.0) * img_w
+                                ymin = (y_center - height / 2.0) * img_h
+                                xmax = (x_center + width / 2.0) * img_w
+                                ymax = (y_center + height / 2.0) * img_h
+
+                                xmin = clamp(xmin, 0.0, img_w)
+                                xmax = clamp(xmax, 0.0, img_w)
+                                ymin = clamp(ymin, 0.0, img_h)
+                                ymax = clamp(ymax, 0.0, img_h)
+
+                                points = [
+                                    [xmin, ymin],
+                                    [xmax, ymin],
+                                    [xmax, ymax],
+                                    [xmin, ymax],
+                                ]
+                                shape_type = "rectangle"
+                            else:
+                                coords = list(map(float, parts[1:]))
+                                if len(coords) < 6 or len(coords) % 2 != 0:
+                                    continue
+                                points = []
+                                for i in range(0, len(coords), 2):
+                                    x = clamp(coords[i] * img_w, 0.0, img_w)
+                                    y = clamp(coords[i + 1] * img_h, 0.0, img_h)
+                                    points.append([x, y])
+                                shape_type = "polygon"
+
+                            shapes.append(
+                                {
+                                    "label": label,
+                                    "score": None,
+                                    "points": points,
+                                    "group_id": None,
+                                    "description": None,
+                                    "difficult": False,
+                                    "shape_type": shape_type,
+                                    "flags": {},
+                                    "attributes": {},
+                                    "kie_linking": [],
+                                }
+                            )
+
+                    if not shapes:
+                        progress.update_progress(1)
+                        continue
+
+                    # 复制图片
+                    copy_file_safe(img_path, output_path / img_path.name)
+
+                    json_data = {
+                        "version": "3.3.5",
+                        "flags": {},
+                        "shapes": shapes,
+                        "imagePath": img_path.name,
+                        "imageData": None,
+                        "imageHeight": img_h,
+                        "imageWidth": img_w,
+                    }
+
+                    json_path = output_path / f"{base_name}.json"
+                    with json_path.open("w", encoding="utf-8") as f:
+                        json.dump(json_data, f, ensure_ascii=False, indent=2)
+
+                    result["statistics"]["converted"] += 1
+                except Exception as e:
+                    result["statistics"]["errors"] += 1
+                    result["success"] = False
+                    self.logger.error(f"转换失败 {img_path}: {e}")
+                finally:
+                    progress.update_progress(1)
 
         return result
 
