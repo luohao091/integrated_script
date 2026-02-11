@@ -10,6 +10,7 @@ Used to package integrated_script project as Windows executable
 
 import importlib.util
 import os
+import platform
 import shlex
 import shutil
 import subprocess
@@ -22,6 +23,10 @@ def build_exe():
 
     project_root = Path(__file__).parent
     main_script = project_root / "main.py"
+
+    machine = platform.machine().lower()
+    is_arm64 = machine in {"aarch64", "arm64"}
+    print(f"Build machine: {machine} (arm64={is_arm64})")
 
     if not main_script.exists():
         print(f"Error: Main script not found {main_script}")
@@ -70,8 +75,15 @@ def build_exe():
 
     upx_path = shutil.which("upx")
     upx_args = []
-    if upx_path:
+    if is_arm64:
+        upx_args = ["--noupx"]
+        if upx_path:
+            print("Notice: ARM64 build disables UPX.")
+        else:
+            print("Notice: ARM64 build disables UPX (UPX not installed).")
+    elif upx_path:
         upx_args = ["--upx-dir", str(Path(upx_path).resolve().parent)]
+        print("Notice: UPX enabled.")
     else:
         print("Notice: UPX not found, build will omit binary compression.")
 
@@ -81,6 +93,12 @@ def build_exe():
         "no",
     }
 
+    strip_enabled = os.name != "nt" and not is_arm64
+    if os.name != "nt" and is_arm64:
+        print("Notice: ARM64 build disables --strip.")
+    if strip_enabled:
+        print("Notice: --strip enabled.")
+
     cmd_parts = [
         sys.executable,
         "-m",
@@ -88,7 +106,6 @@ def build_exe():
         "--noconfirm",
         "--onefile",
         "--console",
-        "--strip" if os.name != "nt" else "",
         "--name=integrated_script",
         "--distpath",
         str(project_root / "dist"),
@@ -96,6 +113,8 @@ def build_exe():
         str(project_root / "build"),
     ]
     cmd_parts = [part for part in cmd_parts if part]
+    if strip_enabled:
+        cmd_parts.append("--strip")
     if clean_enabled:
         cmd_parts.append("--clean")
     cmd_parts += upx_args
